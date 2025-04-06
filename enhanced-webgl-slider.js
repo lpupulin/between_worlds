@@ -1,5 +1,4 @@
-
-// WebGL Slider with custom displacement transition and expoOut easing
+// WebGL Slider with custom displacement transition, expoOut easing, and preserved aspect ratio
 
 document.addEventListener('DOMContentLoaded', () => {
   // Main slider class
@@ -23,9 +22,11 @@ document.addEventListener('DOMContentLoaded', () => {
       this.totalSlides = this.worldButtons.length;
       this.images = [];
       this.textures = [];
+      this.aspectRatios = []; // Store aspect ratios for each image
       this.isAnimating = false;
-      this.transitionDuration = 0.8; // seconds (reduced from 1.2 to 0.8)
+      this.transitionDuration = 0.8; // seconds
       this.transitionStrength = 0.1; // transition strength parameter
+      this.heightVh = 70; // Height in vh units
       
       // Get all image sources from thumbnails
       this.worldButtons.forEach(button => {
@@ -58,18 +59,25 @@ document.addEventListener('DOMContentLoaded', () => {
         // Set up Three.js scene
         this.renderer = new THREE.WebGLRenderer({ alpha: true });
         this.renderer.setPixelRatio(window.devicePixelRatio);
-        this.renderer.setSize(window.innerWidth, window.innerHeight);
+        
+        // Calculate the desired height in pixels
+        const viewportHeight = window.innerHeight;
+        const targetHeight = (this.heightVh / 100) * viewportHeight;
+        
+        // Initially set width equal to the container width
+        const containerWidth = this.container.clientWidth;
+        
+        // Set initial size (will be adjusted when textures load)
+        this.renderer.setSize(containerWidth, targetHeight);
         
         // Replace the original image with our canvas
         this.imageElement.style.display = 'none';
         this.container.appendChild(this.renderer.domElement);
         this.renderer.domElement.classList.add('webgl-canvas');
-        this.renderer.domElement.style.position = 'absolute';
-        this.renderer.domElement.style.top = '0';
-        this.renderer.domElement.style.left = '0';
+        this.renderer.domElement.style.position = 'relative'; // Changed from absolute
         this.renderer.domElement.style.width = '100%';
-        this.renderer.domElement.style.height = '100%';
-        this.renderer.domElement.style.objectFit = 'cover';
+        this.renderer.domElement.style.height = `${this.heightVh}vh`;
+        this.renderer.domElement.style.objectFit = 'contain'; // Changed from cover
         this.renderer.domElement.style.zIndex = '-1';
         
         // Create scene, camera, and geometry
@@ -82,11 +90,18 @@ document.addEventListener('DOMContentLoaded', () => {
         // Load textures for all images
         const textureLoader = new THREE.TextureLoader();
         this.images.forEach((src, index) => {
-          const texture = textureLoader.load(src, () => {
-            this.textures[index] = texture;
+          const texture = textureLoader.load(src, (loadedTexture) => {
+            this.textures[index] = loadedTexture;
+            
+            // Store the aspect ratio
+            const image = loadedTexture.image;
+            const aspectRatio = image.width / image.height;
+            this.aspectRatios[index] = aspectRatio;
+            
             // When the first texture is loaded, create the material and mesh
             if (index === 0 && !this.mesh) {
               this.createMaterial();
+              this.updateRendererSize(); // Update renderer size based on aspect ratio
             }
           });
         });
@@ -96,6 +111,33 @@ document.addEventListener('DOMContentLoaded', () => {
       
       // Handle window resize
       window.addEventListener('resize', this.onResize.bind(this));
+    }
+    
+    updateRendererSize() {
+      if (!this.textures[this.currentIndex]) return;
+      
+      // Get current aspect ratio
+      const aspectRatio = this.aspectRatios[this.currentIndex] || 1;
+      
+      // Calculate height in pixels based on vh setting
+      const viewportHeight = window.innerHeight;
+      const targetHeight = (this.heightVh / 100) * viewportHeight;
+      
+      // Calculate width based on aspect ratio and height
+      const targetWidth = targetHeight * aspectRatio;
+      
+      // Set the size of the renderer
+      this.renderer.setSize(targetWidth, targetHeight);
+      
+      // Update container if needed
+      if (this.container.style.height !== `${this.heightVh}vh`) {
+        this.container.style.height = `${this.heightVh}vh`;
+      }
+      
+      // Re-render
+      if (this.mesh) {
+        this.renderer.render(this.scene, this.camera);
+      }
     }
     
     createMaterial() {
@@ -165,7 +207,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
     onResize() {
       if (this.renderer) {
-        this.renderer.setSize(window.innerWidth, window.innerHeight);
+        this.updateRendererSize();
       }
     }
     
@@ -230,6 +272,9 @@ document.addEventListener('DOMContentLoaded', () => {
           this.currentIndex = nextIndex;
           this.updateContent(this.currentIndex);
           this.isAnimating = false;
+          
+          // Update renderer size for the new image
+          this.updateRendererSize();
         }
       };
       
