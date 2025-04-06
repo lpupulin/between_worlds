@@ -67,7 +67,7 @@ document.addEventListener('DOMContentLoaded', () => {
         this.renderer.domElement.style.top = '0';
         this.renderer.domElement.style.left = '0';
         this.renderer.domElement.style.width = '100%';
-        this.renderer.domElement.style.height = '70vh'; // Set fixed height to 70vh
+        this.renderer.domElement.style.height = '100vh'; // Set fixed height to 70vh
         this.renderer.domElement.style.objectFit = 'contain'; // Changed from cover to contain
         this.renderer.domElement.style.zIndex = '-1';
         
