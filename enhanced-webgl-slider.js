@@ -130,7 +130,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const imageAspect = texture.image.width / texture.image.height;
       const screenAspect = window.innerWidth / window.innerHeight;
 
-      let scaleX = 2, scaleY = 2;
+      let scaleX = 1, scaleY = 1;
       if (screenAspect > imageAspect) {
         scaleX = imageAspect / screenAspect;
       } else {
