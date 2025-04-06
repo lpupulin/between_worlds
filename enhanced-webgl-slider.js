@@ -1,4 +1,4 @@
-// Fixed WebGL Slider with error handling and DOM element checks
+// WebGL Slider with custom displacement transition
 
 document.addEventListener('DOMContentLoaded', () => {
   // Main slider class
@@ -24,6 +24,7 @@ document.addEventListener('DOMContentLoaded', () => {
       this.textures = [];
       this.isAnimating = false;
       this.transitionDuration = 1.2; // seconds
+      this.transitionStrength = 0.1; // transition strength parameter
       
       // Get all image sources from thumbnails
       this.worldButtons.forEach(button => {
@@ -93,12 +94,13 @@ document.addEventListener('DOMContentLoaded', () => {
     
     createMaterial() {
       try {
-        // Create shader material
+        // Create shader material with the custom transition effect
         this.material = new THREE.ShaderMaterial({
           uniforms: {
-            dispFactor: { type: 'f', value: 0 },
-            currentImage: { type: 't', value: this.textures[0] },
-            nextImage: { type: 't', value: this.textures[0] }
+            progress: { type: 'f', value: 0 },
+            fromTexture: { type: 't', value: this.textures[0] },
+            toTexture: { type: 't', value: this.textures[0] },
+            strength: { type: 'f', value: this.transitionStrength }
           },
           vertexShader: `
             varying vec2 vUv;
@@ -109,15 +111,37 @@ document.addEventListener('DOMContentLoaded', () => {
           `,
           fragmentShader: `
             varying vec2 vUv;
-            uniform float dispFactor;
-            uniform sampler2D currentImage;
-            uniform sampler2D nextImage;
+            uniform float progress;
+            uniform float strength;
+            uniform sampler2D fromTexture;
+            uniform sampler2D toTexture;
+            
+            vec4 getFromColor(vec2 uv) {
+              return texture2D(fromTexture, uv);
+            }
+            
+            vec4 getToColor(vec2 uv) {
+              return texture2D(toTexture, uv);
+            }
+            
+            // Author: paniq
+            // License: MIT
+            vec4 transition(vec2 p) {
+              vec4 ca = getFromColor(p);
+              vec4 cb = getToColor(p);
+              
+              vec2 oa = (((ca.rg+ca.b)*0.5)*2.0-1.0);
+              vec2 ob = (((cb.rg+cb.b)*0.5)*2.0-1.0);
+              vec2 oc = mix(oa,ob,0.5)*strength;
+              
+              float w0 = progress;
+              float w1 = 1.0-w0;
+              return mix(getFromColor(p+oc*w0), getToColor(p-oc*w1), progress);
+            }
             
             void main() {
-              vec4 currentColor = texture2D(currentImage, vUv);
-              vec4 nextColor = texture2D(nextImage, vUv);
-              
-              gl_FragColor = mix(currentColor, nextColor, dispFactor);
+              // Apply the transition effect
+              gl_FragColor = transition(vUv);
             }
           `
         });
@@ -174,10 +198,10 @@ document.addEventListener('DOMContentLoaded', () => {
       // Update counter numbers safely
       this.updateCounterNumbers(nextIndex);
       
-      // Update material uniforms
-      this.material.uniforms.currentImage.value = this.textures[this.currentIndex] || this.textures[0];
-      this.material.uniforms.nextImage.value = this.textures[nextIndex] || this.textures[0];
-      this.material.uniforms.dispFactor.value = 0;
+      // Update material uniforms for transition
+      this.material.uniforms.fromTexture.value = this.textures[this.currentIndex] || this.textures[0];
+      this.material.uniforms.toTexture.value = this.textures[nextIndex] || this.textures[0];
+      this.material.uniforms.progress.value = 0;
       
       // Start transition animation
       let startTime = null;
@@ -187,7 +211,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const elapsed = timestamp - startTime;
         const progress = Math.min(elapsed / (this.transitionDuration * 1000), 1);
         
-        this.material.uniforms.dispFactor.value = progress;
+        this.material.uniforms.progress.value = progress;
         this.renderer.render(this.scene, this.camera);
         
         if (progress < 1) {
