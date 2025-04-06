@@ -137,7 +137,7 @@ document.addEventListener('DOMContentLoaded', () => {
         scaleY = screenAspect / imageAspect;
       }
 
-      this.mesh.scale.set(scaleX, scaleY, 1);
+      this.mesh.scale.set(scaleX, scaleY, 1.2);
     }
 
     onResize() {
