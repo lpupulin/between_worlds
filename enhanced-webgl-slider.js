@@ -1,4 +1,4 @@
-// WebGL Slider with custom displacement transition and expoOut easing
+// WebGL Slider with custom displacement transition and GSAP text animations
 
 document.addEventListener('DOMContentLoaded', () => {
   // Main slider class
@@ -12,6 +12,8 @@ document.addEventListener('DOMContentLoaded', () => {
       this.worldButtons = document.querySelectorAll('.button');
       this.countHeading = document.querySelector('.count-heading.current');
       this.worldHeadings = document.querySelectorAll('.world_heading-wrap');
+      this.textWraps = document.querySelectorAll('.text-wrap');
+      this.allCountHeadings = document.querySelectorAll('.count-heading');
       
       // Optional counter elements - check if they exist first
       this.prevHeading = document.querySelector('.count-heading.prev');
@@ -23,8 +25,9 @@ document.addEventListener('DOMContentLoaded', () => {
       this.images = [];
       this.textures = [];
       this.isAnimating = false;
-      this.transitionDuration = 0.8; // seconds (reduced from 1.2 to 0.8)
+      this.transitionDuration = 0.8; // seconds
       this.transitionStrength = 0.1; // transition strength parameter
+      this.textSplits = []; // Store SplitText instances
       
       // Get all image sources from thumbnails
       this.worldButtons.forEach(button => {
@@ -41,10 +44,58 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
       
+      // Check if GSAP and related plugins are available
+      if (typeof gsap === 'undefined') {
+        console.error('WebGL Slider: GSAP library not loaded');
+        return;
+      }
+      
+      // Initialize GSAP text animations
+      this.initTextAnimations();
+      
       // Initialize WebGL renderer and setup event listeners
       this.initThree();
       this.setupEventListeners();
-      this.updateContent(0);
+      this.updateContent(0, true); // true for initial load (no animation)
+    }
+    
+    // Initialize GSAP text animations
+    initTextAnimations() {
+      // Check if necessary GSAP plugins are loaded
+      if (typeof gsap.SplitText === 'undefined') {
+        console.warn('WebGL Slider: GSAP SplitText plugin not loaded. Text animations may not work as expected.');
+      }
+      
+      // Initialize SplitText for world headings (for letter animations)
+      this.worldHeadings.forEach((heading, index) => {
+        const headingText = heading.querySelector('.world_heading');
+        if (headingText) {
+          // Create SplitText instance for each heading
+          try {
+            const splitHeading = new SplitText(headingText, { type: 'chars' });
+            gsap.set(splitHeading.chars, { autoAlpha: 0, filter: 'blur(10px)' });
+            this.textSplits[`heading_${index}`] = splitHeading;
+          } catch (error) {
+            console.error('WebGL Slider: Error initializing SplitText for headings', error);
+          }
+        }
+      });
+      
+      // Initialize SplitText for text wraps (for line-by-line mask)
+      this.textWraps.forEach((textWrap, index) => {
+        try {
+          const splitText = new SplitText(textWrap, { type: 'lines' });
+          gsap.set(splitText.lines, { autoAlpha: 0, yPercent: 100 });
+          this.textSplits[`text_${index}`] = splitText;
+        } catch (error) {
+          console.error('WebGL Slider: Error initializing SplitText for text wraps', error);
+        }
+      });
+      
+      // Setup mask effect for count headings
+      this.allCountHeadings.forEach(countHeading => {
+        gsap.set(countHeading, { autoAlpha: 0, yPercent: 100 });
+      });
     }
     
     // ExpoOut easing function
@@ -208,34 +259,113 @@ document.addEventListener('DOMContentLoaded', () => {
       this.material.uniforms.toTexture.value = this.textures[nextIndex] || this.textures[0];
       this.material.uniforms.progress.value = 0;
       
-      // Start transition animation
-      let startTime = null;
-      
-      const animate = (timestamp) => {
-        if (!startTime) startTime = timestamp;
-        const elapsed = timestamp - startTime;
-        const rawProgress = Math.min(elapsed / (this.transitionDuration * 1000), 1);
-        
-        // Apply expoOut easing to the progress
-        const easedProgress = this.expoOut(rawProgress);
-        
-        this.material.uniforms.progress.value = easedProgress;
-        this.renderer.render(this.scene, this.camera);
-        
-        if (rawProgress < 1) {
-          requestAnimationFrame(animate);
-        } else {
-          // Animation complete
+      // Start transition animation using GSAP
+      gsap.to(this.material.uniforms.progress, {
+        value: 1,
+        duration: this.transitionDuration,
+        ease: "expo.out",
+        onComplete: () => {
           this.currentIndex = nextIndex;
           this.updateContent(this.currentIndex);
           this.isAnimating = false;
         }
-      };
+      });
       
-      requestAnimationFrame(animate);
+      // Animate text elements
+      this.animateTextOut(this.currentIndex);
+      
+      // Slight delay before animating the new content in
+      gsap.delayedCall(this.transitionDuration * 0.4, () => {
+        this.animateTextIn(nextIndex);
+      });
+    }
+    
+    animateTextOut(index) {
+      // Animate heading characters out
+      const headingSplit = this.textSplits[`heading_${index}`];
+      if (headingSplit && headingSplit.chars) {
+        gsap.to(headingSplit.chars, {
+          duration: 0.4,
+          autoAlpha: 0,
+          filter: "blur(10px)",
+          stagger: 0.02,
+          ease: "power1.out"
+        });
+      }
+      
+      // Animate text lines out
+      const textSplit = this.textSplits[`text_${index}`];
+      if (textSplit && textSplit.lines) {
+        gsap.to(textSplit.lines, {
+          duration: 0.4,
+          yPercent: -100,
+          autoAlpha: 0,
+          stagger: 0.03,
+          ease: "power2.in"
+        });
+      }
+    }
+    
+    animateTextIn(index) {
+      // Animate heading characters in with random order
+      const headingSplit = this.textSplits[`heading_${index}`];
+      if (headingSplit && headingSplit.chars) {
+        // Reset first
+        gsap.set(headingSplit.chars, {
+          autoAlpha: 0,
+          filter: "blur(10px)"
+        });
+        
+        // Create random order for the animation
+        const chars = [...headingSplit.chars];
+        chars.sort(() => Math.random() - 0.5);
+        
+        // Animate characters in random order
+        gsap.to(chars, {
+          duration: 0.8,
+          autoAlpha: 1,
+          filter: "blur(0px)",
+          stagger: 0.03,
+          ease: "power2.out"
+        });
+      }
+      
+      // Animate text lines in with mask effect
+      const textSplit = this.textSplits[`text_${index}`];
+      if (textSplit && textSplit.lines) {
+        // Reset first
+        gsap.set(textSplit.lines, {
+          autoAlpha: 0,
+          yPercent: 100
+        });
+        
+        // Animate lines with mask effect
+        gsap.to(textSplit.lines, {
+          duration: 0.6,
+          autoAlpha: 1,
+          yPercent: 0,
+          stagger: 0.05,
+          ease: "power2.out"
+        });
+      }
+      
+      // Animate count headings with mask effect
+      gsap.to(this.allCountHeadings, {
+        duration: 0.6,
+        autoAlpha: 1,
+        yPercent: 0,
+        stagger: 0.1,
+        ease: "power2.out"
+      });
     }
     
     updateCounterNumbers(newIndex) {
+      // Reset all counter animations
+      gsap.set(this.allCountHeadings, {
+        autoAlpha: 0,
+        yPercent: 100
+      });
+      
       // Only update if these elements exist
       if (this.countHeading) {
         this.countHeading.textContent = this.formatIndex(newIndex + 1);
@@ -252,7 +382,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
     
-    updateContent(index) {
+    updateContent(index, isInitial = false) {
       // Update active thumbnail
       this.worldButtons.forEach((button, i) => {
         if (i === index) {
@@ -262,20 +392,50 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       });
       
-      // Update content heading and text
+      // Update content visibility
       this.worldHeadings.forEach((heading, i) => {
         if (i === index) {
-          heading.style.opacity = '0';
           heading.style.display = 'block';
-          setTimeout(() => {
-            heading.style.transition = 'opacity 0.5s ease';
+          if (isInitial) {
+            // For initial load, set immediately visible
             heading.style.opacity = '1';
-          }, 50);
+            
+            // Animate in the text for initial load
+            const headingSplit = this.textSplits[`heading_${i}`];
+            if (headingSplit && headingSplit.chars) {
+              gsap.to(headingSplit.chars, {
+                duration: 0.8,
+                autoAlpha: 1,
+                filter: "blur(0px)",
+                stagger: 0.03,
+                ease: "power2.out"
+              });
+            }
+            
+            const textSplit = this.textSplits[`text_${i}`];
+            if (textSplit && textSplit.lines) {
+              gsap.to(textSplit.lines, {
+                duration: 0.6,
+                autoAlpha: 1,
+                yPercent: 0,
+                stagger: 0.05,
+                ease: "power2.out",
+                delay: 0.2
+              });
+            }
+            
+            gsap.to(this.allCountHeadings, {
+              duration: 0.6,
+              autoAlpha: 1,
+              yPercent: 0,
+              stagger: 0.1,
+              ease: "power2.out",
+              delay: 0.3
+            });
+          }
         } else {
+          heading.style.display = 'none';
           heading.style.opacity = '0';
-          setTimeout(() => {
-            heading.style.display = 'none';
-          }, 500);
         }
       });
     }
@@ -288,10 +448,10 @@ document.addEventListener('DOMContentLoaded', () => {
   
   // Initialize the slider with error handling
   try {
-    if (typeof THREE !== 'undefined') {
+    if (typeof THREE !== 'undefined' && typeof gsap !== 'undefined') {
       const slider = new WebGLSlider();
     } else {
-      console.error('WebGL Slider: Three.js library not loaded');
+      console.error('WebGL Slider: Required libraries (Three.js or GSAP) not loaded');
     }
   } catch (error) {
     console.error('WebGL Slider: Error initializing slider', error);
