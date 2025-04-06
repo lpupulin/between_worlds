@@ -130,14 +130,14 @@ document.addEventListener('DOMContentLoaded', () => {
       const imageAspect = texture.image.width / texture.image.height;
       const screenAspect = window.innerWidth / window.innerHeight;
 
-      let scaleX = 1, scaleY = 1;
+      let scaleX = 2, scaleY = 2;
       if (screenAspect > imageAspect) {
         scaleX = imageAspect / screenAspect;
       } else {
         scaleY = screenAspect / imageAspect;
       }
 
-      this.mesh.scale.set(scaleX, scaleY, 1.2);
+      this.mesh.scale.set(scaleX, scaleY, 1);
     }
 
     onResize() {
