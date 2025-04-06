@@ -1,4 +1,4 @@
-// WebGL Slider with custom displacement transition
+// WebGL Slider with custom displacement transition and expoOut easing
 
 document.addEventListener('DOMContentLoaded', () => {
   // Main slider class
@@ -23,7 +23,7 @@ document.addEventListener('DOMContentLoaded', () => {
       this.images = [];
       this.textures = [];
       this.isAnimating = false;
-      this.transitionDuration = 1.2; // seconds
+      this.transitionDuration = 0.8; // seconds (reduced from 1.2 to 0.8)
       this.transitionStrength = 0.1; // transition strength parameter
       
       // Get all image sources from thumbnails
@@ -45,6 +45,11 @@ document.addEventListener('DOMContentLoaded', () => {
       this.initThree();
       this.setupEventListeners();
       this.updateContent(0);
+    }
+    
+    // ExpoOut easing function
+    expoOut(t) {
+      return t === 1 ? 1 : 1 - Math.pow(2, -10 * t);
     }
     
     initThree() {
@@ -209,12 +214,15 @@ document.addEventListener('DOMContentLoaded', () => {
       const animate = (timestamp) => {
         if (!startTime) startTime = timestamp;
         const elapsed = timestamp - startTime;
-        const progress = Math.min(elapsed / (this.transitionDuration * 1000), 1);
+        const rawProgress = Math.min(elapsed / (this.transitionDuration * 1000), 1);
         
-        this.material.uniforms.progress.value = progress;
+        // Apply expoOut easing to the progress
+        const easedProgress = this.expoOut(rawProgress);
+        
+        this.material.uniforms.progress.value = easedProgress;
         this.renderer.render(this.scene, this.camera);
         
-        if (progress < 1) {
+        if (rawProgress < 1) {
           requestAnimationFrame(animate);
         } else {
           // Animation complete
