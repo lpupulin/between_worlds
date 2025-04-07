@@ -466,14 +466,14 @@ document.addEventListener('DOMContentLoaded', () => {
       // Re-split text after changing content
       const counterElements = [
         { el: this.countHeading, name: 'current' },
-        { el: this.prevHeading, name: 'is-2' },
-        { el: this.nextHeading, name: 'is-3' },
-        { el: this.extraHeading, name: 'is-4' }
+        { el: this.prevHeading, name: 'prev' },
+        { el: this.nextHeading, name: 'next' },
+        { el: this.extraHeading, name: 'extra' }
       ];
 
       counterElements.forEach(item => {
         if (item.el && this.splitInstances[`counter-${item.name}`]) {
-          // Revert the split if possible (SplitType has a revert method similar to SplitText)
+          // Revert the split if possible
           if (typeof this.splitInstances[`counter-${item.name}`].revert === 'function') {
             this.splitInstances[`counter-${item.name}`].revert();
           }
@@ -486,16 +486,29 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       });
 
-      // Update visibility and animation states
-      if (this.countHeading) this.countHeading.style.opacity = 1;
-      if (this.prevHeading) this.prevHeading.style.opacity = 0.5;
-      if (this.nextHeading) this.nextHeading.style.opacity = 0.5;
-      if (this.extraHeading) this.extraHeading.style.opacity = 0.5;
+      // Set initial opacity states without animation
+      gsap.set(this.countHeading, { opacity: 0 });
+      gsap.set(this.prevHeading, { opacity: 0 });
+      gsap.set(this.nextHeading, { opacity: 0 });
+      gsap.set(this.extraHeading, { opacity: 0 });
 
-      gsap.to(this.countHeading, { opacity: 1, duration: 0.5, ease: "power2.out" });
-      gsap.to(this.prevHeading, { opacity: 0.5, duration: 0.5, ease: "power2.out" });
-      gsap.to(this.nextHeading, { opacity: 0.5, duration: 0.5, ease: "power2.out" });
-      gsap.to(this.extraHeading, { opacity: 0.5, duration: 0.5, ease: "power2.out" });
+      // Create a timeline for counter animations
+      const counterTl = gsap.timeline();
+      
+      // Animate the counters
+      counterTl
+        .to(this.countHeading, { 
+          opacity: 1, 
+          duration: 0.5, 
+          ease: "power2.out" 
+        }, 0)
+        .to([this.prevHeading, this.nextHeading, this.extraHeading], { 
+          opacity: 0.5, 
+          duration: 0.5, 
+          ease: "power2.out" 
+        }, 0.1);
+
+      return counterTl;
     }
 
     updateContent(index, isInitial = false) {
