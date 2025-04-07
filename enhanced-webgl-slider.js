@@ -19,7 +19,7 @@ document.addEventListener('DOMContentLoaded', () => {
       this.transitionDuration = 0.8;
       this.transitionStrength = 0.1;
 
-      this.scaleFactor = 0.9; // 🟢 Adjust image size here (0.9 = 90%)
+      this.scaleFactor = 0.7; // 🟢 Adjust image size here (0.9 = 90%)
 
       this.worldButtons.forEach(button => {
         const img = button.querySelector('img');
