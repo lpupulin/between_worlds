@@ -75,6 +75,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
           this.textures[i] = texture;
 
+          // Adjust the size after the texture has loaded
           if (i === 0 && !this.mesh) {
             this.createMaterial();
             this.setPlaneSize(texture.image);
@@ -224,44 +225,3 @@ document.addEventListener('DOMContentLoaded', () => {
         const prevIndex = newIndex === 0 ? this.totalSlides - 1 : newIndex - 1;
         this.prevHeading.textContent = this.formatIndex(prevIndex + 1);
       }
-      if (this.nextHeading) {
-        const nextIndex = (newIndex + 1) % this.totalSlides;
-        this.nextHeading.textContent = this.formatIndex(nextIndex + 1);
-      }
-    }
-
-    updateContent(index) {
-      this.worldButtons.forEach((button, i) => {
-        button.classList.toggle('active', i === index);
-      });
-
-      this.worldHeadings.forEach((heading, i) => {
-        if (i === index) {
-          heading.style.opacity = '0';
-          heading.style.display = 'block';
-          setTimeout(() => {
-            heading.style.transition = 'opacity 0.5s ease';
-            heading.style.opacity = '1';
-          }, 50);
-        } else {
-          heading.style.opacity = '0';
-          setTimeout(() => heading.style.display = 'none', 500);
-        }
-      });
-    }
-
-    formatIndex(index) {
-      return index < 10 ? `0${index}` : `${index}`;
-    }
-  }
-
-  try {
-    if (typeof THREE !== 'undefined') {
-      new WebGLSlider();
-    } else {
-      console.error('WebGL Slider: Three.js library not loaded');
-    }
-  } catch (error) {
-    console.error('WebGL Slider: Error initializing slider', error);
-  }
-});
