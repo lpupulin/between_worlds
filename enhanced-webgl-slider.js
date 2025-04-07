@@ -7,8 +7,9 @@ document.addEventListener('DOMContentLoaded', () => {
       this.rightArrow = document.querySelector('.btn_arrow_wrap.is-right');
       this.worldButtons = document.querySelectorAll('.button');
       this.countHeading = document.querySelector('.count-heading.current') || null;
-      this.prevHeading = document.querySelector('.count-heading.prev') || null;
-      this.nextHeading = document.querySelector('.count-heading.next') || null;
+      this.prevHeading = document.querySelector('.count-heading.is-2') || null;
+      this.nextHeading = document.querySelector('.count-heading.is-3') || null;
+      this.extraHeading = document.querySelector('.count-heading.is-4') || null;
       this.worldHeadings = document.querySelectorAll('.world_heading-wrap');
 
       this.currentIndex = 0;
@@ -40,8 +41,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
       // Log warnings if any of the count-heading elements are missing
       if (!this.countHeading) console.warn('WebGL Slider: .count-heading.current not found');
-      if (!this.prevHeading) console.warn('WebGL Slider: .count-heading.prev not found');
-      if (!this.nextHeading) console.warn('WebGL Slider: .count-heading.next not found');
+      if (!this.prevHeading) console.warn('WebGL Slider: .count-heading.is-2 not found');
+      if (!this.nextHeading) console.warn('WebGL Slider: .count-heading.is-3 not found');
+      if (!this.extraHeading) console.warn('WebGL Slider: .count-heading.is-4 not found');
 
       this.initThree();
       this.setupEventListeners();
@@ -456,21 +458,26 @@ document.addEventListener('DOMContentLoaded', () => {
         const nextIndex = (newIndex + 1) % this.totalSlides;
         this.nextHeading.textContent = this.formatIndex(nextIndex + 1);
       }
-      
+      if (this.extraHeading) {
+        const extraIndex = (newIndex + 2) % this.totalSlides;
+        this.extraHeading.textContent = this.formatIndex(extraIndex + 1);
+      }
+
       // Re-split text after changing content
       const counterElements = [
         { el: this.countHeading, name: 'current' },
-        { el: this.prevHeading, name: 'prev' },
-        { el: this.nextHeading, name: 'next' }
+        { el: this.prevHeading, name: 'is-2' },
+        { el: this.nextHeading, name: 'is-3' },
+        { el: this.extraHeading, name: 'is-4' }
       ];
-      
+
       counterElements.forEach(item => {
         if (item.el && this.splitInstances[`counter-${item.name}`]) {
           // Revert the split if possible (SplitType has a revert method similar to SplitText)
           if (typeof this.splitInstances[`counter-${item.name}`].revert === 'function') {
             this.splitInstances[`counter-${item.name}`].revert();
           }
-          
+
           // Re-split with new content
           this.splitInstances[`counter-${item.name}`] = new SplitType(item.el, {
             types: 'chars',
