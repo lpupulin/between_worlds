@@ -6,7 +6,7 @@ document.addEventListener('DOMContentLoaded', () => {
       this.leftArrow = document.querySelector('.btn_arrow_wrap.is-left');
       this.rightArrow = document.querySelector('.btn_arrow_wrap.is-right');
       this.worldButtons = document.querySelectorAll('.button');
-      this.countHeading = document.querySelector('.count-heading.current') || null;
+      this.countHeading = document.querySelector('.count-heading.is-1') || null;
       this.prevHeading = document.querySelector('.count-heading.is-2') || null;
       this.nextHeading = document.querySelector('.count-heading.is-3') || null;
       this.extraHeading = document.querySelector('.count-heading.is-4') || null;
@@ -449,53 +449,45 @@ document.addEventListener('DOMContentLoaded', () => {
 
     updateCounterNumbers(newIndex) {
       // Ensure elements exist before updating text content
-      if (this.countHeading) this.countHeading.textContent = this.formatIndex(newIndex + 1);
-      if (this.prevHeading) {
-        const prevIndex = newIndex === 0 ? this.totalSlides - 1 : newIndex - 1;
-        this.prevHeading.textContent = this.formatIndex(prevIndex + 1);
-      }
-      if (this.nextHeading) {
-        const nextIndex = (newIndex + 1) % this.totalSlides;
-        this.nextHeading.textContent = this.formatIndex(nextIndex + 1);
-      }
-      if (this.extraHeading) {
-        const extraIndex = (newIndex + 2) % this.totalSlides;
-        this.extraHeading.textContent = this.formatIndex(extraIndex + 1);
-      }
-
-      // Re-split text after changing content
       const counterElements = [
-        { el: this.countHeading, name: 'current' },
+        { el: this.countHeading, name: 'is-1' },
         { el: this.prevHeading, name: 'is-2' },
         { el: this.nextHeading, name: 'is-3' },
         { el: this.extraHeading, name: 'is-4' }
       ];
 
-      counterElements.forEach(item => {
-        if (item.el && this.splitInstances[`counter-${item.name}`]) {
-          // Revert the split if possible (SplitType has a revert method similar to SplitText)
-          if (typeof this.splitInstances[`counter-${item.name}`].revert === 'function') {
-            this.splitInstances[`counter-${item.name}`].revert();
-          }
+      counterElements.forEach((item, i) => {
+        if (item.el) {
+          const index = i === 0 ? newIndex : 
+                        i === 1 ? (newIndex === 0 ? this.totalSlides - 1 : newIndex - 1) : 
+                        i === 2 ? (newIndex + 1) % this.totalSlides : 
+                                  (newIndex + 2) % this.totalSlides;
 
-          // Re-split with new content
-          this.splitInstances[`counter-${item.name}`] = new SplitType(item.el, {
-            types: 'chars',
-            tagName: 'span'
-          });
+          item.el.textContent = this.formatIndex(index + 1);
+
+          // Hide all counters except the current one
+          item.el.style.display = i === 0 ? 'block' : 'none';
+
+          // Re-split text after changing content
+          if (this.splitInstances[`counter-${item.name}`]) {
+            if (typeof this.splitInstances[`counter-${item.name}`].revert === 'function') {
+              this.splitInstances[`counter-${item.name}`].revert();
+            }
+            this.splitInstances[`counter-${item.name}`] = new SplitType(item.el, {
+              types: 'chars',
+              tagName: 'span'
+            });
+          }
         }
       });
 
-      // Update visibility and animation states
-      if (this.countHeading) this.countHeading.style.opacity = 1;
-      if (this.prevHeading) this.prevHeading.style.opacity = 0.5;
-      if (this.nextHeading) this.nextHeading.style.opacity = 0.5;
-      if (this.extraHeading) this.extraHeading.style.opacity = 0.5;
-
-      gsap.to(this.countHeading, { opacity: 1, duration: 0.5, ease: "power2.out" });
-      gsap.to(this.prevHeading, { opacity: 0.5, duration: 0.5, ease: "power2.out" });
-      gsap.to(this.nextHeading, { opacity: 0.5, duration: 0.5, ease: "power2.out" });
-      gsap.to(this.extraHeading, { opacity: 0.5, duration: 0.5, ease: "power2.out" });
+      // Animate the current counter in
+      if (this.splitInstances['counter-is-1'] && this.splitInstances['counter-is-1'].chars) {
+        gsap.fromTo(this.splitInstances['counter-is-1'].chars, 
+          { y: 20, opacity: 0 },
+          { y: 0, opacity: 1, duration: 0.5, stagger: 0.05, ease: "power2.out" }
+        );
+      }
     }
 
     updateContent(index, isInitial = false) {
