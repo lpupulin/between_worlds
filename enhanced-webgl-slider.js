@@ -1,7 +1,6 @@
 document.addEventListener('DOMContentLoaded', () => {
   class WebGLSlider {
     constructor() {
-      // DOM Elements
       this.container = document.querySelector('.section.is-gallery');
       this.imageElement = document.querySelector('.autumn');
       this.leftArrow = document.querySelector('.btn_arrow_wrap.is-left');
@@ -25,10 +24,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if (img) this.images.push(img.src);
       });
 
-      if (!this.container || !this.imageElement || !this.leftArrow || !this.rightArrow || !this.countHeading || this.worldButtons.length === 0) {
-        console.error('WebGL Slider: Required DOM elements not found');
-        return;
-      }
+      if (!this.container || !this.imageElement || !this.leftArrow || !this.rightArrow ||
+          this.worldButtons.length === 0 || !this.countHeading) return;
 
       this.initThree();
       this.setupEventListeners();
@@ -43,30 +40,37 @@ document.addEventListener('DOMContentLoaded', () => {
       this.renderer = new THREE.WebGLRenderer({ alpha: true });
       this.renderer.setPixelRatio(window.devicePixelRatio);
       this.renderer.setSize(window.innerWidth, window.innerHeight);
-
       this.imageElement.style.display = 'none';
       this.container.appendChild(this.renderer.domElement);
       this.renderer.domElement.classList.add('webgl-canvas');
       Object.assign(this.renderer.domElement.style, {
         position: 'absolute',
-        top: '0',
-        left: '0',
+        top: 0,
+        left: 0,
         width: '100%',
-        height: '100vh',
-        zIndex: '-1',
+        height: '100%',
+        zIndex: -1,
+        pointerEvents: 'none',
       });
 
       this.scene = new THREE.Scene();
       this.camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
-      this.geometry = new THREE.PlaneGeometry(1, 1);
+      this.geometry = new THREE.PlaneGeometry(2, 2);
 
       const textureLoader = new THREE.TextureLoader();
       this.images.forEach((src, i) => {
         textureLoader.load(src, (texture) => {
           this.textures[i] = texture;
+
           if (i === 0 && !this.mesh) {
             this.createMaterial();
-            this.createMeshFromTexture(texture);
+
+            // 🔄 Wait for image to load for correct sizing
+            if (texture.image.complete) {
+              this.createMeshFromTexture(texture);
+            } else {
+              texture.image.onload = () => this.createMeshFromTexture(texture);
+            }
           }
         });
       });
@@ -80,7 +84,7 @@ document.addEventListener('DOMContentLoaded', () => {
           progress: { type: 'f', value: 0 },
           fromTexture: { type: 't', value: this.textures[0] },
           toTexture: { type: 't', value: this.textures[0] },
-          strength: { type: 'f', value: this.transitionStrength }
+          strength: { type: 'f', value: this.transitionStrength },
         },
         vertexShader: `
           varying vec2 vUv;
@@ -107,12 +111,12 @@ document.addEventListener('DOMContentLoaded', () => {
           vec4 transition(vec2 p) {
             vec4 ca = getFromColor(p);
             vec4 cb = getToColor(p);
-            vec2 oa = (((ca.rg+ca.b)*0.5)*2.0-1.0);
-            vec2 ob = (((cb.rg+cb.b)*0.5)*2.0-1.0);
-            vec2 oc = mix(oa,ob,0.5)*strength;
+            vec2 oa = (((ca.rg + ca.b) * 0.5) * 2.0 - 1.0);
+            vec2 ob = (((cb.rg + cb.b) * 0.5) * 2.0 - 1.0);
+            vec2 oc = mix(oa, ob, 0.5) * strength;
             float w0 = progress;
-            float w1 = 1.0-w0;
-            return mix(getFromColor(p+oc*w0), getToColor(p-oc*w1), progress);
+            float w1 = 1.0 - w0;
+            return mix(getFromColor(p + oc * w0), getToColor(p - oc * w1), progress);
           }
 
           void main() {
@@ -123,30 +127,34 @@ document.addEventListener('DOMContentLoaded', () => {
 
       this.mesh = new THREE.Mesh(this.geometry, this.material);
       this.scene.add(this.mesh);
-      this.renderer.render(this.scene, this.camera);
     }
 
     createMeshFromTexture(texture) {
-      const imageAspect = texture.image.width / texture.image.height;
-      const screenAspect = window.innerWidth / window.innerHeight;
+      const img = texture.image;
+      const imgAspect = img.width / img.height;
+      const containerAspect = window.innerWidth / window.innerHeight;
 
-      let scaleX = 1, scaleY = 1;
-      if (screenAspect > imageAspect) {
-        scaleX = imageAspect / screenAspect;
+      let scaleX = 1;
+      let scaleY = 1;
+
+      if (imgAspect > containerAspect) {
+        scaleY = imgAspect / containerAspect;
       } else {
-        scaleY = screenAspect / imageAspect;
+        scaleX = containerAspect / imgAspect;
       }
 
       this.mesh.scale.set(scaleX, scaleY, 1);
+      this.renderer.render(this.scene, this.camera);
     }
 
     onResize() {
       this.renderer.setSize(window.innerWidth, window.innerHeight);
-      const currentTexture = this.textures[this.currentIndex];
-      if (currentTexture?.image) {
-        this.createMeshFromTexture(currentTexture);
+
+      // Recalculate scale on resize
+      const currentTex = this.textures[this.currentIndex];
+      if (currentTex && currentTex.image) {
+        this.createMeshFromTexture(currentTex);
       }
-      this.renderer.render(this.scene, this.camera);
     }
 
     setupEventListeners() {
@@ -165,30 +173,29 @@ document.addEventListener('DOMContentLoaded', () => {
 
     navigate(direction) {
       if (this.isAnimating || !this.mesh) return;
-
       let nextIndex = this.currentIndex + direction;
       if (nextIndex < 0) nextIndex = this.totalSlides - 1;
       if (nextIndex >= this.totalSlides) nextIndex = 0;
-
       this.goTo(nextIndex, direction);
     }
 
     goTo(index, direction) {
       if (this.isAnimating || !this.mesh) return;
-
       this.isAnimating = true;
       const nextIndex = index;
 
       this.updateCounterNumbers(nextIndex);
 
-      const fromTex = this.textures[this.currentIndex] || this.textures[0];
-      const toTex = this.textures[nextIndex] || this.textures[0];
-      this.material.uniforms.fromTexture.value = fromTex;
-      this.material.uniforms.toTexture.value = toTex;
+      this.material.uniforms.fromTexture.value = this.textures[this.currentIndex] || this.textures[0];
+      this.material.uniforms.toTexture.value = this.textures[nextIndex] || this.textures[0];
       this.material.uniforms.progress.value = 0;
 
-      if (toTex.image) {
+      // Update image scaling
+      const toTex = this.textures[nextIndex];
+      if (toTex && toTex.image) {
         this.createMeshFromTexture(toTex);
+      } else {
+        toTex.image.onload = () => this.createMeshFromTexture(toTex);
       }
 
       let startTime = null;
@@ -197,7 +204,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const elapsed = timestamp - startTime;
         const rawProgress = Math.min(elapsed / (this.transitionDuration * 1000), 1);
         const easedProgress = this.expoOut(rawProgress);
-
         this.material.uniforms.progress.value = easedProgress;
         this.renderer.render(this.scene, this.camera);
 
@@ -214,9 +220,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     updateCounterNumbers(newIndex) {
-      if (this.countHeading) {
-        this.countHeading.textContent = this.formatIndex(newIndex + 1);
-      }
+      if (this.countHeading) this.countHeading.textContent = this.formatIndex(newIndex + 1);
       if (this.prevHeading) {
         const prevIndex = newIndex === 0 ? this.totalSlides - 1 : newIndex - 1;
         this.prevHeading.textContent = this.formatIndex(prevIndex + 1);
@@ -257,6 +261,6 @@ document.addEventListener('DOMContentLoaded', () => {
   if (typeof THREE !== 'undefined') {
     new WebGLSlider();
   } else {
-    console.error('WebGL Slider: Three.js library not loaded');
+    console.error('WebGL Slider: Three.js not loaded');
   }
 });
