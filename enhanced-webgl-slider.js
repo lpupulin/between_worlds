@@ -20,6 +20,10 @@ document.addEventListener('DOMContentLoaded', () => {
       this.transitionStrength = 0.1;
       this.imageScale = 0.4; // Easily control image size (0.0 - 1.0)
       this.allTexturesLoaded = false;
+      
+      // GSAP SplitText instances
+      this.splitInstances = {};
+      this.textWraps = document.querySelectorAll('.text-wrap');
 
       this.worldButtons.forEach(button => {
         const img = button.querySelector('img');
@@ -36,7 +40,172 @@ document.addEventListener('DOMContentLoaded', () => {
 
       this.initThree();
       this.setupEventListeners();
-      this.updateContent(0);
+      this.initGSAP();
+      this.updateContent(0, true); // true for initial load
+    }
+
+    initGSAP() {
+      // Check if GSAP and SplitText are available
+      if (typeof gsap === 'undefined' || typeof SplitText === 'undefined') {
+        console.error('GSAP or SplitText not found. Make sure they are loaded before this script.');
+        return;
+      }
+      
+      // Initialize SplitText for all headings
+      this.worldHeadings.forEach((heading, index) => {
+        const headingElement = heading.querySelector('.world_heading');
+        const textWrap = heading.querySelector('.text-wrap');
+        
+        if (headingElement) {
+          this.splitInstances[`heading-${index}`] = new SplitText(headingElement, {
+            type: "chars,words",
+            position: "relative"
+          });
+        }
+        
+        if (textWrap) {
+          this.splitInstances[`text-${index}`] = new SplitText(textWrap, {
+            type: "lines",
+            linesClass: "split-line"
+          });
+          
+          // Add a wrapper to each line for better animation control
+          gsap.set(this.splitInstances[`text-${index}`].lines, { overflow: "hidden" });
+          this.splitInstances[`text-${index}`].lines.forEach(line => {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'line-wrapper';
+            wrapper.style.overflow = 'hidden';
+            line.parentNode.insertBefore(wrapper, line);
+            wrapper.appendChild(line);
+          });
+        }
+      });
+      
+      // Initialize SplitText for counter numbers
+      const counterElements = [this.countHeading, this.prevHeading, this.nextHeading];
+      counterElements.forEach((el, i) => {
+        if (el) {
+          const counterName = i === 0 ? 'current' : i === 1 ? 'prev' : 'next';
+          this.splitInstances[`counter-${counterName}`] = new SplitText(el, {
+            type: "chars",
+            position: "relative"
+          });
+        }
+      });
+      
+      // Set initial states - hide all except current
+      this.worldHeadings.forEach((heading, i) => {
+        if (i !== this.currentIndex) {
+          heading.style.display = 'none';
+        }
+      });
+      
+      // Animate initial heading in
+      this.animateTextIn(this.currentIndex);
+    }
+
+    animateTextIn(index) {
+      const headingSplit = this.splitInstances[`heading-${index}`];
+      const textSplit = this.splitInstances[`text-${index}`];
+      
+      // Timeline for animations
+      const tl = gsap.timeline();
+      
+      // Animate heading chars
+      if (headingSplit) {
+        tl.fromTo(headingSplit.chars, 
+          { y: 40, opacity: 0 },
+          { 
+            y: 0, 
+            opacity: 1, 
+            duration: 0.6, 
+            stagger: 0.03,
+            ease: "power3.out" 
+          }, 0);
+      }
+      
+      // Animate text lines
+      if (textSplit) {
+        const lines = textSplit.lines;
+        tl.fromTo(lines, 
+          { y: 50 },
+          { 
+            y: 0, 
+            duration: 0.7, 
+            stagger: 0.05,
+            ease: "power2.out" 
+          }, 0.2);
+      }
+      
+      return tl;
+    }
+    
+    animateTextOut(index) {
+      const headingSplit = this.splitInstances[`heading-${index}`];
+      const textSplit = this.splitInstances[`text-${index}`];
+      
+      const tl = gsap.timeline();
+      
+      // Animate heading chars out
+      if (headingSplit) {
+        tl.to(headingSplit.chars, { 
+          y: -20, 
+          opacity: 0, 
+          duration: 0.4, 
+          stagger: 0.02,
+          ease: "power2.in" 
+        }, 0);
+      }
+      
+      // Animate text lines out
+      if (textSplit) {
+        const lines = textSplit.lines;
+        tl.to(lines, { 
+          y: -30, 
+          duration: 0.4, 
+          stagger: 0.03,
+          ease: "power2.in" 
+        }, 0);
+      }
+      
+      return tl;
+    }
+    
+    animateCounterUpdate(newIndex) {
+      // Get the current, previous and next indices
+      const currentSplit = this.splitInstances['counter-current'];
+      const prevSplit = this.splitInstances['counter-prev'];
+      const nextSplit = this.splitInstances['counter-next'];
+      
+      // Update text content first
+      this.updateCounterNumbers(newIndex);
+      
+      // Create animation timeline
+      const tl = gsap.timeline();
+      
+      // Animate the numbers
+      if (currentSplit) {
+        tl.fromTo(currentSplit.chars, 
+          { y: -20, opacity: 0 },
+          { y: 0, opacity: 1, duration: 0.5, stagger: 0.05, ease: "back.out" },
+          0);
+      }
+      
+      if (prevSplit) {
+        tl.fromTo(prevSplit.chars, 
+          { y: 10, opacity: 0 },
+          { y: 0, opacity: 0.7, duration: 0.5, stagger: 0.05, ease: "power2.out" },
+          0.1);
+      }
+      
+      if (nextSplit) {
+        tl.fromTo(nextSplit.chars, 
+          { y: 10, opacity: 0 },
+          { y: 0, opacity: 0.7, duration: 0.5, stagger: 0.05, ease: "power2.out" },
+          0.1);
+      }
+      
+      return tl;
     }
 
     expoOut(t) {
@@ -206,39 +375,66 @@ document.addEventListener('DOMContentLoaded', () => {
     goTo(index, direction) {
       if (this.isAnimating || !this.allTexturesLoaded) return;
       this.isAnimating = true;
+      
+      // Store current index before updating
+      const previousIndex = this.currentIndex;
 
-      this.updateCounterNumbers(index);
+      // Timeline for all animations
+      const masterTimeline = gsap.timeline({
+        onComplete: () => {
+          this.isAnimating = false;
+        }
+      });
 
+      // Start by animating out the current text
+      masterTimeline.add(this.animateTextOut(previousIndex))
+      
+      // Update counters with animation
+      masterTimeline.add(this.animateCounterUpdate(index), "<0.3")
+      
+      // Handle image transition
       this.material.uniforms.fromTexture.value = this.textures[this.currentIndex] || this.textures[0];
       this.material.uniforms.toTexture.value = this.textures[index] || this.textures[0];
       this.material.uniforms.progress.value = 0;
 
       this.setPlaneSize(this.textures[index].image);
-
-      let startTime = null;
-
-      const animate = (timestamp) => {
-        if (!startTime) startTime = timestamp;
-        const elapsed = timestamp - startTime;
-        const rawProgress = Math.min(elapsed / (this.transitionDuration * 1000), 1);
-        const easedProgress = this.expoOut(rawProgress);
-
-        this.material.uniforms.progress.value = easedProgress;
-        this.renderer.render(this.scene, this.camera);
-
-        if (rawProgress < 1) {
-          requestAnimationFrame(animate);
-        } else {
-          this.currentIndex = index;
-          this.updateContent(this.currentIndex);
-          this.isAnimating = false;
+      
+      // Image transition timeline
+      masterTimeline.to(this.material.uniforms.progress, {
+        value: 1,
+        duration: this.transitionDuration,
+        ease: "power2.inOut",
+        onUpdate: () => {
+          this.renderer.render(this.scene, this.camera);
         }
-      };
-
-      requestAnimationFrame(animate);
+      }, "<0.1");
+      
+      // Update current index
+      this.currentIndex = index;
+      
+      // Hide previous content, show new content
+      this.worldHeadings.forEach((heading, i) => {
+        if (i === index) {
+          heading.style.display = 'block';
+        } else if (i === previousIndex) {
+          // Keep old content visible until animation is done
+          masterTimeline.call(() => {
+            heading.style.display = 'none';
+          }, null, null, ">-0.1");
+        }
+      });
+      
+      // Update active buttons
+      this.worldButtons.forEach((button, i) => {
+        button.classList.toggle('active', i === index);
+      });
+      
+      // Animate in new content
+      masterTimeline.add(this.animateTextIn(index), "<0.4");
     }
 
     updateCounterNumbers(newIndex) {
+      // Update text content but without DOM manipulation - GSAP will handle that
       if (this.countHeading) this.countHeading.textContent = this.formatIndex(newIndex + 1);
       if (this.prevHeading) {
         const prevIndex = newIndex === 0 ? this.totalSlides - 1 : newIndex - 1;
@@ -248,26 +444,46 @@ document.addEventListener('DOMContentLoaded', () => {
         const nextIndex = (newIndex + 1) % this.totalSlides;
         this.nextHeading.textContent = this.formatIndex(nextIndex + 1);
       }
+      
+      // Split text again after changing content
+      const counterElements = [
+        { el: this.countHeading, name: 'current' },
+        { el: this.prevHeading, name: 'prev' },
+        { el: this.nextHeading, name: 'next' }
+      ];
+      
+      counterElements.forEach(item => {
+        if (item.el && this.splitInstances[`counter-${item.name}`]) {
+          // Revert the split
+          this.splitInstances[`counter-${item.name}`].revert();
+          
+          // Re-split with new content
+          this.splitInstances[`counter-${item.name}`] = new SplitText(item.el, {
+            type: "chars",
+            position: "relative"
+          });
+        }
+      });
     }
 
-    updateContent(index) {
+    updateContent(index, isInitial = false) {
       this.worldButtons.forEach((button, i) => {
         button.classList.toggle('active', i === index);
       });
 
-      this.worldHeadings.forEach((heading, i) => {
-        if (i === index) {
-          heading.style.opacity = '0';
-          heading.style.display = 'block';
-          setTimeout(() => {
-            heading.style.transition = 'opacity 0.5s ease';
-            heading.style.opacity = '1';
-          }, 50);
-        } else {
-          heading.style.opacity = '0';
-          setTimeout(() => heading.style.display = 'none', 500);
-        }
-      });
+      if (isInitial) {
+        // Initial load - make sure everything is set up properly
+        this.worldHeadings.forEach((heading, i) => {
+          if (i === index) {
+            heading.style.display = 'block';
+          } else {
+            heading.style.display = 'none';
+          }
+        });
+        
+        // Set initial counter numbers without animation
+        this.updateCounterNumbers(index);
+      }
     }
 
     formatIndex(index) {
