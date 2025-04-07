@@ -19,13 +19,18 @@ document.addEventListener('DOMContentLoaded', () => {
       this.transitionDuration = 0.8;
       this.transitionStrength = 0.1;
 
+      this.scaleFactor = 0.9; // 🟢 Adjust image size here (0.9 = 90%)
+
       this.worldButtons.forEach(button => {
         const img = button.querySelector('img');
         if (img) this.images.push(img.src);
       });
 
-      if (!this.container || !this.imageElement || !this.leftArrow || !this.rightArrow ||
-          this.worldButtons.length === 0 || !this.countHeading) return;
+      if (!this.container || !this.imageElement || !this.leftArrow || !this.rightArrow || 
+          this.worldButtons.length === 0 || !this.countHeading) {
+        console.error('WebGL Slider: Required DOM elements not found');
+        return;
+      }
 
       this.initThree();
       this.setupEventListeners();
@@ -37,45 +42,46 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     initThree() {
-      this.renderer = new THREE.WebGLRenderer({ alpha: true });
-      this.renderer.setPixelRatio(window.devicePixelRatio);
-      this.renderer.setSize(window.innerWidth, window.innerHeight);
-      this.imageElement.style.display = 'none';
-      this.container.appendChild(this.renderer.domElement);
-      this.renderer.domElement.classList.add('webgl-canvas');
-      Object.assign(this.renderer.domElement.style, {
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        width: '100%',
-        height: '100%',
-        zIndex: -1,
-        pointerEvents: 'none',
-      });
+      try {
+        this.renderer = new THREE.WebGLRenderer({ alpha: true });
+        this.renderer.setPixelRatio(window.devicePixelRatio);
+        this.renderer.setSize(window.innerWidth, window.innerHeight);
 
-      this.scene = new THREE.Scene();
-      this.camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
-      this.geometry = new THREE.PlaneGeometry(2, 2);
-
-      const textureLoader = new THREE.TextureLoader();
-      this.images.forEach((src, i) => {
-        textureLoader.load(src, (texture) => {
-          this.textures[i] = texture;
-
-          if (i === 0 && !this.mesh) {
-            this.createMaterial();
-
-            // 🔄 Wait for image to load for correct sizing
-            if (texture.image.complete) {
-              this.createMeshFromTexture(texture);
-            } else {
-              texture.image.onload = () => this.createMeshFromTexture(texture);
-            }
-          }
+        this.imageElement.style.display = 'none';
+        this.container.appendChild(this.renderer.domElement);
+        this.renderer.domElement.classList.add('webgl-canvas');
+        Object.assign(this.renderer.domElement.style, {
+          position: 'absolute',
+          top: '0',
+          left: '0',
+          width: '100%',
+          height: '100%',
+          zIndex: '-1'
         });
-      });
 
-      window.addEventListener('resize', this.onResize.bind(this));
+        this.scene = new THREE.Scene();
+        this.camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+        this.geometry = new THREE.PlaneGeometry(2, 2);
+
+        const loader = new THREE.TextureLoader();
+        this.images.forEach((src, index) => {
+          loader.load(src, (texture) => {
+            this.textures[index] = texture;
+
+            if (index === 0 && !this.mesh) {
+              this.createMaterial();
+              this.mesh = new THREE.Mesh(this.geometry, this.material);
+              this.scene.add(this.mesh);
+              this.createMeshFromTexture(texture); // 🔧 Apply correct scale
+              this.renderer.render(this.scene, this.camera);
+            }
+          });
+        });
+
+        window.addEventListener('resize', this.onResize.bind(this));
+      } catch (error) {
+        console.error('WebGL Slider: Error initializing Three.js', error);
+      }
     }
 
     createMaterial() {
@@ -84,7 +90,7 @@ document.addEventListener('DOMContentLoaded', () => {
           progress: { type: 'f', value: 0 },
           fromTexture: { type: 't', value: this.textures[0] },
           toTexture: { type: 't', value: this.textures[0] },
-          strength: { type: 'f', value: this.transitionStrength },
+          strength: { type: 'f', value: this.transitionStrength }
         },
         vertexShader: `
           varying vec2 vUv;
@@ -111,9 +117,10 @@ document.addEventListener('DOMContentLoaded', () => {
           vec4 transition(vec2 p) {
             vec4 ca = getFromColor(p);
             vec4 cb = getToColor(p);
-            vec2 oa = (((ca.rg + ca.b) * 0.5) * 2.0 - 1.0);
-            vec2 ob = (((cb.rg + cb.b) * 0.5) * 2.0 - 1.0);
+            vec2 oa = (((ca.rg+ca.b)*0.5)*2.0-1.0);
+            vec2 ob = (((cb.rg+cb.b)*0.5)*2.0-1.0);
             vec2 oc = mix(oa, ob, 0.5) * strength;
+
             float w0 = progress;
             float w1 = 1.0 - w0;
             return mix(getFromColor(p + oc * w0), getToColor(p - oc * w1), progress);
@@ -124,48 +131,40 @@ document.addEventListener('DOMContentLoaded', () => {
           }
         `
       });
-
-      this.mesh = new THREE.Mesh(this.geometry, this.material);
-      this.scene.add(this.mesh);
     }
 
     createMeshFromTexture(texture) {
       const img = texture.image;
       const imgAspect = img.width / img.height;
-      const containerAspect = window.innerWidth / window.innerHeight;
+      const viewAspect = window.innerWidth / window.innerHeight;
+      let scaleX, scaleY;
 
-      let scaleX = 1;
-      let scaleY = 1;
-
-      if (imgAspect > containerAspect) {
-        scaleY = imgAspect / containerAspect;
+      if (imgAspect > viewAspect) {
+        scaleX = 1;
+        scaleY = viewAspect / imgAspect;
       } else {
-        scaleX = containerAspect / imgAspect;
+        scaleX = imgAspect / viewAspect;
+        scaleY = 1;
       }
 
-      this.mesh.scale.set(scaleX, scaleY, 1);
-      this.renderer.render(this.scene, this.camera);
+      this.mesh.scale.set(scaleX * this.scaleFactor, scaleY * this.scaleFactor, 1);
     }
 
     onResize() {
       this.renderer.setSize(window.innerWidth, window.innerHeight);
-
-      // Recalculate scale on resize
-      const currentTex = this.textures[this.currentIndex];
-      if (currentTex && currentTex.image) {
-        this.createMeshFromTexture(currentTex);
+      if (this.mesh && this.textures[this.currentIndex]) {
+        this.createMeshFromTexture(this.textures[this.currentIndex]);
       }
     }
 
     setupEventListeners() {
       this.leftArrow.addEventListener('click', () => this.navigate(-1));
       this.rightArrow.addEventListener('click', () => this.navigate(1));
-
       this.worldButtons.forEach((button, index) => {
         button.addEventListener('click', () => {
           if (this.currentIndex !== index && !this.isAnimating) {
-            const direction = index > this.currentIndex ? 1 : -1;
-            this.goTo(index, direction);
+            const dir = index > this.currentIndex ? 1 : -1;
+            this.goTo(index, dir);
           }
         });
       });
@@ -181,6 +180,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     goTo(index, direction) {
       if (this.isAnimating || !this.mesh) return;
+
       this.isAnimating = true;
       const nextIndex = index;
 
@@ -190,20 +190,17 @@ document.addEventListener('DOMContentLoaded', () => {
       this.material.uniforms.toTexture.value = this.textures[nextIndex] || this.textures[0];
       this.material.uniforms.progress.value = 0;
 
-      // Update image scaling
-      const toTex = this.textures[nextIndex];
-      if (toTex && toTex.image) {
-        this.createMeshFromTexture(toTex);
-      } else {
-        toTex.image.onload = () => this.createMeshFromTexture(toTex);
-      }
+      // Update image scale
+      this.createMeshFromTexture(this.textures[nextIndex]);
 
       let startTime = null;
+
       const animate = (timestamp) => {
         if (!startTime) startTime = timestamp;
         const elapsed = timestamp - startTime;
         const rawProgress = Math.min(elapsed / (this.transitionDuration * 1000), 1);
         const easedProgress = this.expoOut(rawProgress);
+
         this.material.uniforms.progress.value = easedProgress;
         this.renderer.render(this.scene, this.camera);
 
@@ -220,14 +217,16 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     updateCounterNumbers(newIndex) {
-      if (this.countHeading) this.countHeading.textContent = this.formatIndex(newIndex + 1);
+      if (this.countHeading) {
+        this.countHeading.textContent = this.formatIndex(newIndex + 1);
+      }
       if (this.prevHeading) {
-        const prevIndex = newIndex === 0 ? this.totalSlides - 1 : newIndex - 1;
-        this.prevHeading.textContent = this.formatIndex(prevIndex + 1);
+        const prev = newIndex === 0 ? this.totalSlides - 1 : newIndex - 1;
+        this.prevHeading.textContent = this.formatIndex(prev + 1);
       }
       if (this.nextHeading) {
-        const nextIndex = newIndex === this.totalSlides - 1 ? 0 : newIndex + 1;
-        this.nextHeading.textContent = this.formatIndex(nextIndex + 1);
+        const next = newIndex === this.totalSlides - 1 ? 0 : newIndex + 1;
+        this.nextHeading.textContent = this.formatIndex(next + 1);
       }
     }
 
@@ -235,7 +234,6 @@ document.addEventListener('DOMContentLoaded', () => {
       this.worldButtons.forEach((button, i) => {
         button.classList.toggle('active', i === index);
       });
-
       this.worldHeadings.forEach((heading, i) => {
         if (i === index) {
           heading.style.opacity = '0';
@@ -258,9 +256,13 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  if (typeof THREE !== 'undefined') {
-    new WebGLSlider();
-  } else {
-    console.error('WebGL Slider: Three.js not loaded');
+  try {
+    if (typeof THREE !== 'undefined') {
+      new WebGLSlider();
+    } else {
+      console.error('WebGL Slider: THREE.js not loaded');
+    }
+  } catch (error) {
+    console.error('WebGL Slider: Failed to initialize', error);
   }
 });
