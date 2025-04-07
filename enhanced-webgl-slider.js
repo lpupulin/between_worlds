@@ -190,9 +190,10 @@ document.addEventListener('DOMContentLoaded', () => {
       const currentSplit = this.splitInstances['counter-current'];
       const prevSplit = this.splitInstances['counter-prev'];
       const nextSplit = this.splitInstances['counter-next'];
+      const extraSplit = this.splitInstances['counter-extra'];
       
       // Update text content first
-      this.updateCounterNumbers(newIndex);
+      const counterTl = this.updateCounterNumbers(newIndex);
       
       // Create animation timeline
       const tl = gsap.timeline();
@@ -208,14 +209,21 @@ document.addEventListener('DOMContentLoaded', () => {
       if (prevSplit && prevSplit.chars) {
         tl.fromTo(prevSplit.chars, 
           { y: 10, opacity: 0 },
-          { y: 0, opacity: 0.7, duration: 0.5, stagger: 0.05, ease: "power2.out" },
+          { y: 0, opacity: 0.5, duration: 0.5, stagger: 0.05, ease: "power2.out" },
           0.1);
       }
       
       if (nextSplit && nextSplit.chars) {
         tl.fromTo(nextSplit.chars, 
           { y: 10, opacity: 0 },
-          { y: 0, opacity: 0.7, duration: 0.5, stagger: 0.05, ease: "power2.out" },
+          { y: 0, opacity: 0.5, duration: 0.5, stagger: 0.05, ease: "power2.out" },
+          0.1);
+      }
+      
+      if (extraSplit && extraSplit.chars) {
+        tl.fromTo(extraSplit.chars, 
+          { y: 10, opacity: 0 },
+          { y: 0, opacity: 0.5, duration: 0.5, stagger: 0.05, ease: "power2.out" },
           0.1);
       }
       
