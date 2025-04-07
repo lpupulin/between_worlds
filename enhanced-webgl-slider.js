@@ -18,17 +18,15 @@ document.addEventListener('DOMContentLoaded', () => {
       this.isAnimating = false;
       this.transitionDuration = 0.8;
       this.transitionStrength = 0.1;
-      this.imageScale = 0.4; // easily control the size of the displayed images (0.0 - 1.0)
+      this.imageScale = 0.4; // Easily control image scale
 
       this.worldButtons.forEach(button => {
         const img = button.querySelector('img');
-        if (img) {
-          this.images.push(img.src);
-        }
+        if (img) this.images.push(img.src);
       });
 
-      if (!this.container || !this.imageElement || !this.leftArrow || !this.rightArrow || 
-          this.worldButtons.length === 0 || !this.countHeading) {
+      if (!this.container || !this.imageElement || !this.leftArrow || !this.rightArrow ||
+        this.worldButtons.length === 0 || !this.countHeading) {
         console.error('WebGL Slider: Required DOM elements not found');
         return;
       }
@@ -43,64 +41,56 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     initThree() {
-      this.renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
-      this.renderer.setPixelRatio(window.devicePixelRatio);
-      this.renderer.setSize(window.innerWidth, window.innerHeight);
-      this.imageElement.style.display = 'none';
-      this.container.appendChild(this.renderer.domElement);
-      this.renderer.domElement.classList.add('webgl-canvas');
-      this.renderer.domElement.style.position = 'absolute';
-      this.renderer.domElement.style.top = '0';
-      this.renderer.domElement.style.left = '0';
-      this.renderer.domElement.style.width = '100%';
-      this.renderer.domElement.style.height = '100%';
-      this.renderer.domElement.style.zIndex = '-1';
-
-      this.scene = new THREE.Scene();
-      this.camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
-      this.geometry = new THREE.PlaneGeometry(2, 2);
-
-      const loader = new THREE.TextureLoader();
-      this.images.forEach((src, index) => {
-        loader.load(src, (texture) => {
-          texture.minFilter = THREE.LinearFilter;
-          texture.magFilter = THREE.LinearFilter;
-          texture.format = THREE.RGBAFormat;
-          texture.premultiplyAlpha = true;
-          texture.needsUpdate = true;
-          this.textures[index] = texture;
-
-          if (index === 0 && !this.mesh) {
-            this.createMaterial();
-            this.setAspect(texture.image);
-            this.renderer.render(this.scene, this.camera);
-          }
-        });
-      });
-
-      window.addEventListener('resize', () => {
+      try {
+        this.renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+        this.renderer.setPixelRatio(window.devicePixelRatio);
         this.renderer.setSize(window.innerWidth, window.innerHeight);
-        this.setAspect(this.textures[this.currentIndex]?.image);
-        this.renderer.render(this.scene, this.camera);
-      });
-    }
 
-    setAspect(image) {
-      if (!image || !this.mesh) return;
-      const imageAspect = image.width / image.height;
-      const screenAspect = window.innerWidth / window.innerHeight;
-      const scaleX = imageAspect > screenAspect ? screenAspect / imageAspect : 1;
-      const scaleY = imageAspect < screenAspect ? imageAspect / screenAspect : 1;
-      this.mesh.scale.set(scaleX, scaleY, 1);
+        this.imageElement.style.display = 'none';
+        this.container.appendChild(this.renderer.domElement);
+        this.renderer.domElement.classList.add('webgl-canvas');
+        Object.assign(this.renderer.domElement.style, {
+          position: 'absolute',
+          top: '0',
+          left: '0',
+          width: '100%',
+          height: '100%',
+          zIndex: '-1'
+        });
+
+        this.scene = new THREE.Scene();
+        this.camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+        this.geometry = new THREE.PlaneGeometry(2, 2);
+        const loader = new THREE.TextureLoader();
+
+        this.images.forEach((src, index) => {
+          loader.load(src, texture => {
+            texture.minFilter = THREE.LinearFilter;
+            texture.magFilter = THREE.LinearFilter;
+            texture.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
+            this.textures[index] = texture;
+
+            if (index === 0 && !this.mesh) {
+              this.createMaterial();
+              this.resizePlane(texture);
+              this.renderer.render(this.scene, this.camera);
+            }
+          });
+        });
+      } catch (error) {
+        console.error('WebGL Slider: Error initializing Three.js', error);
+      }
+
+      window.addEventListener('resize', this.onResize.bind(this));
     }
 
     createMaterial() {
       this.material = new THREE.ShaderMaterial({
         uniforms: {
-          progress: { type: 'f', value: 0 },
-          fromTexture: { type: 't', value: this.textures[0] },
-          toTexture: { type: 't', value: this.textures[0] },
-          strength: { type: 'f', value: this.transitionStrength }
+          progress: { value: 0 },
+          fromTexture: { value: this.textures[0] },
+          toTexture: { value: this.textures[0] },
+          strength: { value: this.transitionStrength }
         },
         vertexShader: `
           varying vec2 vUv;
@@ -129,7 +119,7 @@ document.addEventListener('DOMContentLoaded', () => {
             vec4 cb = getToColor(p);
             vec2 oa = (((ca.rg+ca.b)*0.5)*2.0-1.0);
             vec2 ob = (((cb.rg+cb.b)*0.5)*2.0-1.0);
-            vec2 oc = mix(oa, ob, 0.5) * strength;
+            vec2 oc = mix(oa, ob, 0.5)*strength;
             float w0 = progress;
             float w1 = 1.0 - w0;
             return mix(getFromColor(p + oc * w0), getToColor(p - oc * w1), progress);
@@ -138,24 +128,46 @@ document.addEventListener('DOMContentLoaded', () => {
           void main() {
             gl_FragColor = transition(vUv);
           }
-        `,
-        transparent: true,
-        blending: THREE.NormalBlending,
-        depthTest: false
+        `
       });
 
       this.mesh = new THREE.Mesh(this.geometry, this.material);
       this.scene.add(this.mesh);
     }
 
+    resizePlane(texture) {
+      const imgAspect = texture.image.width / texture.image.height;
+      const screenAspect = window.innerWidth / window.innerHeight;
+      let scaleX = 1, scaleY = 1;
+
+      if (imgAspect > screenAspect) {
+        scaleX = screenAspect / imgAspect;
+      } else {
+        scaleY = imgAspect / screenAspect;
+      }
+
+      this.mesh.scale.set(scaleX * this.imageScale * 2, scaleY * this.imageScale * 2, 1);
+    }
+
+    onResize() {
+      if (this.renderer) {
+        this.renderer.setSize(window.innerWidth, window.innerHeight);
+        if (this.mesh && this.textures[this.currentIndex]) {
+          this.resizePlane(this.textures[this.currentIndex]);
+        }
+        this.renderer.render(this.scene, this.camera);
+      }
+    }
+
     setupEventListeners() {
       this.leftArrow.addEventListener('click', () => this.navigate(-1));
       this.rightArrow.addEventListener('click', () => this.navigate(1));
+
       this.worldButtons.forEach((button, index) => {
         button.addEventListener('click', () => {
           if (this.currentIndex !== index && !this.isAnimating) {
-            const direction = index > this.currentIndex ? 1 : -1;
-            this.goTo(index, direction);
+            const dir = index > this.currentIndex ? 1 : -1;
+            this.goTo(index, dir);
           }
         });
       });
@@ -171,16 +183,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
     goTo(index, direction) {
       if (this.isAnimating || !this.mesh) return;
+
       this.isAnimating = true;
       const nextIndex = index;
-      this.updateCounterNumbers(nextIndex);
 
+      this.updateCounterNumbers(nextIndex);
       this.material.uniforms.fromTexture.value = this.textures[this.currentIndex] || this.textures[0];
       this.material.uniforms.toTexture.value = this.textures[nextIndex] || this.textures[0];
       this.material.uniforms.progress.value = 0;
-      this.setAspect(this.textures[nextIndex]?.image);
+
+      this.resizePlane(this.textures[nextIndex]);
 
       let startTime = null;
+
       const animate = (timestamp) => {
         if (!startTime) startTime = timestamp;
         const elapsed = timestamp - startTime;
@@ -198,13 +213,12 @@ document.addEventListener('DOMContentLoaded', () => {
           this.isAnimating = false;
         }
       };
+
       requestAnimationFrame(animate);
     }
 
     updateCounterNumbers(newIndex) {
-      if (this.countHeading) {
-        this.countHeading.textContent = this.formatIndex(newIndex + 1);
-      }
+      if (this.countHeading) this.countHeading.textContent = this.formatIndex(newIndex + 1);
       if (this.prevHeading) {
         const prevIndex = newIndex === 0 ? this.totalSlides - 1 : newIndex - 1;
         this.prevHeading.textContent = this.formatIndex(prevIndex + 1);
@@ -219,6 +233,7 @@ document.addEventListener('DOMContentLoaded', () => {
       this.worldButtons.forEach((button, i) => {
         button.classList.toggle('active', i === index);
       });
+
       this.worldHeadings.forEach((heading, i) => {
         if (i === index) {
           heading.style.opacity = '0';
@@ -229,9 +244,7 @@ document.addEventListener('DOMContentLoaded', () => {
           }, 50);
         } else {
           heading.style.opacity = '0';
-          setTimeout(() => {
-            heading.style.display = 'none';
-          }, 500);
+          setTimeout(() => heading.style.display = 'none', 500);
         }
       });
     }
@@ -245,9 +258,9 @@ document.addEventListener('DOMContentLoaded', () => {
     if (typeof THREE !== 'undefined') {
       new WebGLSlider();
     } else {
-      console.error('WebGL Slider: Three.js not loaded');
+      console.error('WebGL Slider: Three.js library not loaded');
     }
   } catch (error) {
-    console.error('WebGL Slider: Error initializing', error);
+    console.error('WebGL Slider: Error initializing slider', error);
   }
 });
