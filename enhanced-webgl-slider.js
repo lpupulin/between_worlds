@@ -22,7 +22,7 @@ document.addEventListener('DOMContentLoaded', () => {
       this.isAnimating = false;
       this.transitionDuration = 0.8;
       this.transitionStrength = 0.1;
-      this.imageScale = 0.5; // easily control the size of the displayed images (0.0 - 1.0)
+      this.imageScale = 0.4; // easily control the size of the displayed images (0.0 - 1.0)
 
       this.worldButtons.forEach(button => {
         const img = button.querySelector('img');
