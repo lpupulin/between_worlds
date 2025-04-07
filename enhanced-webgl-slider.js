@@ -6,9 +6,9 @@ document.addEventListener('DOMContentLoaded', () => {
       this.leftArrow = document.querySelector('.btn_arrow_wrap.is-left');
       this.rightArrow = document.querySelector('.btn_arrow_wrap.is-right');
       this.worldButtons = document.querySelectorAll('.button');
-      this.countHeading = document.querySelector('.count-heading.current');
-      this.prevHeading = document.querySelector('.count-heading.prev');
-      this.nextHeading = document.querySelector('.count-heading.next');
+      this.countHeading = document.querySelector('.count-heading.current') || null;
+      this.prevHeading = document.querySelector('.count-heading.prev') || null;
+      this.nextHeading = document.querySelector('.count-heading.next') || null;
       this.worldHeadings = document.querySelectorAll('.world_heading-wrap');
 
       this.currentIndex = 0;
@@ -37,6 +37,11 @@ document.addEventListener('DOMContentLoaded', () => {
         console.error('WebGL Slider: Required DOM elements not found');
         return;
       }
+
+      // Log warnings if any of the count-heading elements are missing
+      if (!this.countHeading) console.warn('WebGL Slider: .count-heading.current not found');
+      if (!this.prevHeading) console.warn('WebGL Slider: .count-heading.prev not found');
+      if (!this.nextHeading) console.warn('WebGL Slider: .count-heading.next not found');
 
       this.initThree();
       this.setupEventListeners();
@@ -441,7 +446,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     updateCounterNumbers(newIndex) {
-      // Update text content
+      // Ensure elements exist before updating text content
       if (this.countHeading) this.countHeading.textContent = this.formatIndex(newIndex + 1);
       if (this.prevHeading) {
         const prevIndex = newIndex === 0 ? this.totalSlides - 1 : newIndex - 1;
