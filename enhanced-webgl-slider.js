@@ -21,7 +21,7 @@ document.addEventListener('DOMContentLoaded', () => {
       this.imageScale = 0.4; // Easily control image size (0.0 - 1.0)
       this.allTexturesLoaded = false;
       
-      // GSAP SplitText instances
+      // SplitType instances
       this.splitInstances = {};
       this.textWraps = document.querySelectorAll('.text-wrap');
 
@@ -40,55 +40,62 @@ document.addEventListener('DOMContentLoaded', () => {
 
       this.initThree();
       this.setupEventListeners();
-      this.initGSAP();
+      this.initTextSplitting();
       this.updateContent(0, true); // true for initial load
     }
 
-    initGSAP() {
-      // Check if GSAP and SplitText are available
-      if (typeof gsap === 'undefined' || typeof SplitText === 'undefined') {
-        console.error('GSAP or SplitText not found. Make sure they are loaded before this script.');
+    initTextSplitting() {
+      // Check if GSAP and SplitType are available
+      if (typeof gsap === 'undefined') {
+        console.error('GSAP not found. Make sure it is loaded before this script.');
         return;
       }
       
-      // Initialize SplitText for all headings
+      if (typeof SplitType === 'undefined') {
+        console.error('SplitType not found. Make sure it is loaded before this script.');
+        return;
+      }
+      
+      // Initialize SplitType for all headings
       this.worldHeadings.forEach((heading, index) => {
         const headingElement = heading.querySelector('.world_heading');
         const textWrap = heading.querySelector('.text-wrap');
         
         if (headingElement) {
-          this.splitInstances[`heading-${index}`] = new SplitText(headingElement, {
-            type: "chars,words",
-            position: "relative"
+          this.splitInstances[`heading-${index}`] = new SplitType(headingElement, {
+            types: 'chars,words',
+            tagName: 'span'
           });
         }
         
         if (textWrap) {
-          this.splitInstances[`text-${index}`] = new SplitText(textWrap, {
-            type: "lines",
-            linesClass: "split-line"
+          this.splitInstances[`text-${index}`] = new SplitType(textWrap, {
+            types: 'lines',
+            tagName: 'span'
           });
           
           // Add a wrapper to each line for better animation control
-          gsap.set(this.splitInstances[`text-${index}`].lines, { overflow: "hidden" });
-          this.splitInstances[`text-${index}`].lines.forEach(line => {
-            const wrapper = document.createElement('div');
-            wrapper.className = 'line-wrapper';
-            wrapper.style.overflow = 'hidden';
-            line.parentNode.insertBefore(wrapper, line);
-            wrapper.appendChild(line);
-          });
+          if (this.splitInstances[`text-${index}`].lines) {
+            gsap.set(this.splitInstances[`text-${index}`].lines, { overflow: "hidden" });
+            this.splitInstances[`text-${index}`].lines.forEach(line => {
+              const wrapper = document.createElement('div');
+              wrapper.className = 'line-wrapper';
+              wrapper.style.overflow = 'hidden';
+              line.parentNode.insertBefore(wrapper, line);
+              wrapper.appendChild(line);
+            });
+          }
         }
       });
       
-      // Initialize SplitText for counter numbers
+      // Initialize SplitType for counter numbers
       const counterElements = [this.countHeading, this.prevHeading, this.nextHeading];
       counterElements.forEach((el, i) => {
         if (el) {
           const counterName = i === 0 ? 'current' : i === 1 ? 'prev' : 'next';
-          this.splitInstances[`counter-${counterName}`] = new SplitText(el, {
-            type: "chars",
-            position: "relative"
+          this.splitInstances[`counter-${counterName}`] = new SplitType(el, {
+            types: 'chars',
+            tagName: 'span'
           });
         }
       });
@@ -112,7 +119,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const tl = gsap.timeline();
       
       // Animate heading chars
-      if (headingSplit) {
+      if (headingSplit && headingSplit.chars) {
         tl.fromTo(headingSplit.chars, 
           { y: 40, opacity: 0 },
           { 
@@ -125,7 +132,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
       
       // Animate text lines
-      if (textSplit) {
+      if (textSplit && textSplit.lines) {
         const lines = textSplit.lines;
         tl.fromTo(lines, 
           { y: 50 },
@@ -147,7 +154,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const tl = gsap.timeline();
       
       // Animate heading chars out
-      if (headingSplit) {
+      if (headingSplit && headingSplit.chars) {
         tl.to(headingSplit.chars, { 
           y: -20, 
           opacity: 0, 
@@ -158,7 +165,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
       
       // Animate text lines out
-      if (textSplit) {
+      if (textSplit && textSplit.lines) {
         const lines = textSplit.lines;
         tl.to(lines, { 
           y: -30, 
@@ -172,7 +179,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     animateCounterUpdate(newIndex) {
-      // Get the current, previous and next indices
+      // Get the current, previous and next instances
       const currentSplit = this.splitInstances['counter-current'];
       const prevSplit = this.splitInstances['counter-prev'];
       const nextSplit = this.splitInstances['counter-next'];
@@ -184,21 +191,21 @@ document.addEventListener('DOMContentLoaded', () => {
       const tl = gsap.timeline();
       
       // Animate the numbers
-      if (currentSplit) {
+      if (currentSplit && currentSplit.chars) {
         tl.fromTo(currentSplit.chars, 
           { y: -20, opacity: 0 },
           { y: 0, opacity: 1, duration: 0.5, stagger: 0.05, ease: "back.out" },
           0);
       }
       
-      if (prevSplit) {
+      if (prevSplit && prevSplit.chars) {
         tl.fromTo(prevSplit.chars, 
           { y: 10, opacity: 0 },
           { y: 0, opacity: 0.7, duration: 0.5, stagger: 0.05, ease: "power2.out" },
           0.1);
       }
       
-      if (nextSplit) {
+      if (nextSplit && nextSplit.chars) {
         tl.fromTo(nextSplit.chars, 
           { y: 10, opacity: 0 },
           { y: 0, opacity: 0.7, duration: 0.5, stagger: 0.05, ease: "power2.out" },
@@ -434,7 +441,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     updateCounterNumbers(newIndex) {
-      // Update text content but without DOM manipulation - GSAP will handle that
+      // Update text content
       if (this.countHeading) this.countHeading.textContent = this.formatIndex(newIndex + 1);
       if (this.prevHeading) {
         const prevIndex = newIndex === 0 ? this.totalSlides - 1 : newIndex - 1;
@@ -445,7 +452,7 @@ document.addEventListener('DOMContentLoaded', () => {
         this.nextHeading.textContent = this.formatIndex(nextIndex + 1);
       }
       
-      // Split text again after changing content
+      // Re-split text after changing content
       const counterElements = [
         { el: this.countHeading, name: 'current' },
         { el: this.prevHeading, name: 'prev' },
@@ -454,13 +461,15 @@ document.addEventListener('DOMContentLoaded', () => {
       
       counterElements.forEach(item => {
         if (item.el && this.splitInstances[`counter-${item.name}`]) {
-          // Revert the split
-          this.splitInstances[`counter-${item.name}`].revert();
+          // Revert the split if possible (SplitType has a revert method similar to SplitText)
+          if (typeof this.splitInstances[`counter-${item.name}`].revert === 'function') {
+            this.splitInstances[`counter-${item.name}`].revert();
+          }
           
           // Re-split with new content
-          this.splitInstances[`counter-${item.name}`] = new SplitText(item.el, {
-            type: "chars",
-            position: "relative"
+          this.splitInstances[`counter-${item.name}`] = new SplitType(item.el, {
+            types: 'chars',
+            tagName: 'span'
           });
         }
       });
