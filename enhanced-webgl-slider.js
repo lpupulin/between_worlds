@@ -485,6 +485,17 @@ document.addEventListener('DOMContentLoaded', () => {
           });
         }
       });
+
+      // Update visibility and animation states
+      if (this.countHeading) this.countHeading.style.opacity = 1;
+      if (this.prevHeading) this.prevHeading.style.opacity = 0.5;
+      if (this.nextHeading) this.nextHeading.style.opacity = 0.5;
+      if (this.extraHeading) this.extraHeading.style.opacity = 0.5;
+
+      gsap.to(this.countHeading, { opacity: 1, duration: 0.5, ease: "power2.out" });
+      gsap.to(this.prevHeading, { opacity: 0.5, duration: 0.5, ease: "power2.out" });
+      gsap.to(this.nextHeading, { opacity: 0.5, duration: 0.5, ease: "power2.out" });
+      gsap.to(this.extraHeading, { opacity: 0.5, duration: 0.5, ease: "power2.out" });
     }
 
     updateContent(index, isInitial = false) {
