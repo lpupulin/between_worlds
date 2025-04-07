@@ -1,5 +1,3 @@
-// WebGL Slider with proper aspect ratio, scaling, and resize fix
-
 document.addEventListener('DOMContentLoaded', () => {
   class WebGLSlider {
     constructor() {
@@ -17,8 +15,6 @@ document.addEventListener('DOMContentLoaded', () => {
       this.totalSlides = this.worldButtons.length;
       this.images = [];
       this.textures = [];
-      this.material = null;
-      this.mesh = null;
       this.isAnimating = false;
       this.transitionDuration = 0.8;
       this.transitionStrength = 0.1;
@@ -26,10 +22,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
       this.worldButtons.forEach(button => {
         const img = button.querySelector('img');
-        if (img) this.images.push(img.src);
+        if (img) {
+          this.images.push(img.src);
+        }
       });
 
-      if (!this.container || !this.imageElement || !this.leftArrow || !this.rightArrow || !this.countHeading) {
+      if (!this.container || !this.imageElement || !this.leftArrow || !this.rightArrow || 
+          this.worldButtons.length === 0 || !this.countHeading) {
         console.error('WebGL Slider: Required DOM elements not found');
         return;
       }
@@ -44,10 +43,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     initThree() {
-      this.renderer = new THREE.WebGLRenderer({ alpha: true });
+      this.renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
       this.renderer.setPixelRatio(window.devicePixelRatio);
       this.renderer.setSize(window.innerWidth, window.innerHeight);
-
       this.imageElement.style.display = 'none';
       this.container.appendChild(this.renderer.domElement);
       this.renderer.domElement.classList.add('webgl-canvas');
@@ -60,20 +58,22 @@ document.addEventListener('DOMContentLoaded', () => {
 
       this.scene = new THREE.Scene();
       this.camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
-
       this.geometry = new THREE.PlaneGeometry(2, 2);
-      const loader = new THREE.TextureLoader();
 
+      const loader = new THREE.TextureLoader();
       this.images.forEach((src, index) => {
         loader.load(src, (texture) => {
           texture.minFilter = THREE.LinearFilter;
           texture.magFilter = THREE.LinearFilter;
+          texture.format = THREE.RGBAFormat;
+          texture.premultiplyAlpha = true;
           texture.needsUpdate = true;
           this.textures[index] = texture;
 
           if (index === 0 && !this.mesh) {
             this.createMaterial();
             this.setAspect(texture.image);
+            this.renderer.render(this.scene, this.camera);
           }
         });
       });
@@ -81,16 +81,26 @@ document.addEventListener('DOMContentLoaded', () => {
       window.addEventListener('resize', () => {
         this.renderer.setSize(window.innerWidth, window.innerHeight);
         this.setAspect(this.textures[this.currentIndex]?.image);
+        this.renderer.render(this.scene, this.camera);
       });
+    }
+
+    setAspect(image) {
+      if (!image || !this.mesh) return;
+      const imageAspect = image.width / image.height;
+      const screenAspect = window.innerWidth / window.innerHeight;
+      const scaleX = imageAspect > screenAspect ? screenAspect / imageAspect : 1;
+      const scaleY = imageAspect < screenAspect ? imageAspect / screenAspect : 1;
+      this.mesh.scale.set(scaleX, scaleY, 1);
     }
 
     createMaterial() {
       this.material = new THREE.ShaderMaterial({
         uniforms: {
-          progress: { value: 0 },
-          fromTexture: { value: this.textures[0] },
-          toTexture: { value: this.textures[0] },
-          strength: { value: this.transitionStrength }
+          progress: { type: 'f', value: 0 },
+          fromTexture: { type: 't', value: this.textures[0] },
+          toTexture: { type: 't', value: this.textures[0] },
+          strength: { type: 'f', value: this.transitionStrength }
         },
         vertexShader: `
           varying vec2 vUv;
@@ -119,38 +129,23 @@ document.addEventListener('DOMContentLoaded', () => {
             vec4 cb = getToColor(p);
             vec2 oa = (((ca.rg+ca.b)*0.5)*2.0-1.0);
             vec2 ob = (((cb.rg+cb.b)*0.5)*2.0-1.0);
-            vec2 oc = mix(oa,ob,0.5)*strength;
+            vec2 oc = mix(oa, ob, 0.5) * strength;
             float w0 = progress;
-            float w1 = 1.0-w0;
-            return mix(getFromColor(p+oc*w0), getToColor(p-oc*w1), progress);
+            float w1 = 1.0 - w0;
+            return mix(getFromColor(p + oc * w0), getToColor(p - oc * w1), progress);
           }
 
           void main() {
             gl_FragColor = transition(vUv);
           }
-        `
+        `,
+        transparent: true,
+        blending: THREE.NormalBlending,
+        depthTest: false
       });
 
       this.mesh = new THREE.Mesh(this.geometry, this.material);
       this.scene.add(this.mesh);
-      this.renderer.render(this.scene, this.camera);
-    }
-
-    setAspect(image) {
-      if (!image || !this.mesh) return;
-
-      const canvasAspect = window.innerWidth / window.innerHeight;
-      const imageAspect = image.width / image.height;
-      let scaleX = 1, scaleY = 1;
-
-      if (canvasAspect > imageAspect) {
-        scaleX = imageAspect / canvasAspect;
-      } else {
-        scaleY = canvasAspect / imageAspect;
-      }
-
-      this.mesh.scale.set(scaleX * this.imageScale * 2, scaleY * this.imageScale * 2, 1);
-      this.renderer.render(this.scene, this.camera);
     }
 
     setupEventListeners() {
@@ -178,17 +173,14 @@ document.addEventListener('DOMContentLoaded', () => {
       if (this.isAnimating || !this.mesh) return;
       this.isAnimating = true;
       const nextIndex = index;
-
       this.updateCounterNumbers(nextIndex);
 
-      this.material.uniforms.fromTexture.value = this.textures[this.currentIndex];
-      this.material.uniforms.toTexture.value = this.textures[nextIndex];
+      this.material.uniforms.fromTexture.value = this.textures[this.currentIndex] || this.textures[0];
+      this.material.uniforms.toTexture.value = this.textures[nextIndex] || this.textures[0];
       this.material.uniforms.progress.value = 0;
-
       this.setAspect(this.textures[nextIndex]?.image);
 
       let startTime = null;
-
       const animate = (timestamp) => {
         if (!startTime) startTime = timestamp;
         const elapsed = timestamp - startTime;
@@ -206,7 +198,6 @@ document.addEventListener('DOMContentLoaded', () => {
           this.isAnimating = false;
         }
       };
-
       requestAnimationFrame(animate);
     }
 
@@ -228,7 +219,6 @@ document.addEventListener('DOMContentLoaded', () => {
       this.worldButtons.forEach((button, i) => {
         button.classList.toggle('active', i === index);
       });
-
       this.worldHeadings.forEach((heading, i) => {
         if (i === index) {
           heading.style.opacity = '0';
@@ -251,9 +241,13 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  if (typeof THREE !== 'undefined') {
-    new WebGLSlider();
-  } else {
-    console.error('WebGL Slider: Three.js library not loaded');
+  try {
+    if (typeof THREE !== 'undefined') {
+      new WebGLSlider();
+    } else {
+      console.error('WebGL Slider: Three.js not loaded');
+    }
+  } catch (error) {
+    console.error('WebGL Slider: Error initializing', error);
   }
 });
