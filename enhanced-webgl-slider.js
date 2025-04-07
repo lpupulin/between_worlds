@@ -19,6 +19,7 @@ document.addEventListener('DOMContentLoaded', () => {
       this.transitionDuration = 0.8;
       this.transitionStrength = 0.1;
       this.imageScale = 0.4; // Easily control image size (0.0 - 1.0)
+      this.allTexturesLoaded = false;
 
       this.worldButtons.forEach(button => {
         const img = button.querySelector('img');
@@ -62,27 +63,38 @@ document.addEventListener('DOMContentLoaded', () => {
       this.scene = new THREE.Scene();
       this.camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
       this.geometry = new THREE.PlaneGeometry(2, 2);
+      
+      // Create a placeholder material until the first texture is loaded
+      this.material = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0 });
+      this.mesh = new THREE.Mesh(this.geometry, this.material);
+      this.scene.add(this.mesh);
 
       const loader = new THREE.TextureLoader();
       this.loadedTextures = 0;
-      this.images.forEach((src, i) => {
-        loader.load(src, (texture) => {
-          texture.minFilter = THREE.LinearFilter;
-          texture.magFilter = THREE.LinearFilter;
-          texture.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
-          texture.generateMipmaps = false;
-          texture.needsUpdate = true;
-
-          this.textures[i] = texture;
-
-          // Adjust the size after the texture has loaded
-          if (i === 0 && !this.mesh) {
-            this.createMaterial();
-            this.setPlaneSize(texture.image);
-          }
-
-          this.loadedTextures++;
+      
+      // Promise-based texture loading to ensure we don't create the material until all textures are ready
+      const texturePromises = this.images.map((src, i) => {
+        return new Promise((resolve) => {
+          loader.load(src, (texture) => {
+            texture.minFilter = THREE.LinearFilter;
+            texture.magFilter = THREE.LinearFilter;
+            texture.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
+            texture.generateMipmaps = false;
+            texture.needsUpdate = true;
+            
+            this.textures[i] = texture;
+            this.loadedTextures++;
+            resolve(texture);
+          });
         });
+      });
+      
+      // When the first texture is loaded, initialize the material properly
+      Promise.all(texturePromises).then(() => {
+        this.allTexturesLoaded = true;
+        this.createMaterial();
+        this.setPlaneSize(this.textures[this.currentIndex].image);
+        this.renderer.render(this.scene, this.camera);
       });
 
       window.addEventListener('resize', () => {
@@ -92,9 +104,14 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         this.renderer.render(this.scene, this.camera);
       });
+      
+      // Initial render
+      this.renderer.render(this.scene, this.camera);
     }
 
     setPlaneSize(image) {
+      if (!image) return;
+      
       const imageAspect = image.width / image.height;
       const screenAspect = window.innerWidth / window.innerHeight;
 
@@ -112,6 +129,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     createMaterial() {
+      // Remove the mesh with placeholder material
+      this.scene.remove(this.mesh);
+      
       this.material = new THREE.ShaderMaterial({
         uniforms: {
           progress: { value: 0 },
@@ -161,7 +181,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
       this.mesh = new THREE.Mesh(this.geometry, this.material);
       this.scene.add(this.mesh);
-      this.renderer.render(this.scene, this.camera);
     }
 
     setupEventListeners() {
@@ -179,13 +198,13 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     navigate(direction) {
-      if (this.isAnimating || !this.mesh) return;
+      if (this.isAnimating || !this.allTexturesLoaded) return;
       let nextIndex = (this.currentIndex + direction + this.totalSlides) % this.totalSlides;
       this.goTo(nextIndex, direction);
     }
 
     goTo(index, direction) {
-      if (this.isAnimating || !this.mesh) return;
+      if (this.isAnimating || !this.allTexturesLoaded) return;
       this.isAnimating = true;
 
       this.updateCounterNumbers(index);
@@ -225,3 +244,44 @@ document.addEventListener('DOMContentLoaded', () => {
         const prevIndex = newIndex === 0 ? this.totalSlides - 1 : newIndex - 1;
         this.prevHeading.textContent = this.formatIndex(prevIndex + 1);
       }
+      if (this.nextHeading) {
+        const nextIndex = (newIndex + 1) % this.totalSlides;
+        this.nextHeading.textContent = this.formatIndex(nextIndex + 1);
+      }
+    }
+
+    updateContent(index) {
+      this.worldButtons.forEach((button, i) => {
+        button.classList.toggle('active', i === index);
+      });
+
+      this.worldHeadings.forEach((heading, i) => {
+        if (i === index) {
+          heading.style.opacity = '0';
+          heading.style.display = 'block';
+          setTimeout(() => {
+            heading.style.transition = 'opacity 0.5s ease';
+            heading.style.opacity = '1';
+          }, 50);
+        } else {
+          heading.style.opacity = '0';
+          setTimeout(() => heading.style.display = 'none', 500);
+        }
+      });
+    }
+
+    formatIndex(index) {
+      return index < 10 ? `0${index}` : `${index}`;
+    }
+  }
+
+  try {
+    if (typeof THREE !== 'undefined') {
+      new WebGLSlider();
+    } else {
+      console.error('WebGL Slider: Three.js library not loaded');
+    }
+  } catch (error) {
+    console.error('WebGL Slider: Error initializing slider', error);
+  }
+});
