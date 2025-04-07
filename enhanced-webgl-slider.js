@@ -186,48 +186,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     animateCounterUpdate(newIndex) {
-      // Get the current, previous and next instances
-      const currentSplit = this.splitInstances['counter-current'];
-      const prevSplit = this.splitInstances['counter-prev'];
-      const nextSplit = this.splitInstances['counter-next'];
-      const extraSplit = this.splitInstances['counter-extra'];
-      
-      // Update text content first
-      const counterTl = this.updateCounterNumbers(newIndex);
-      
-      // Create animation timeline
-      const tl = gsap.timeline();
-      
-      // Animate the numbers
-      if (currentSplit && currentSplit.chars) {
-        tl.fromTo(currentSplit.chars, 
-          { y: -20, opacity: 0 },
-          { y: 0, opacity: 1, duration: 0.5, stagger: 0.05, ease: "back.out" },
-          0);
-      }
-      
-      if (prevSplit && prevSplit.chars) {
-        tl.fromTo(prevSplit.chars, 
-          { y: 10, opacity: 0 },
-          { y: 0, opacity: 0.5, duration: 0.5, stagger: 0.05, ease: "power2.out" },
-          0.1);
-      }
-      
-      if (nextSplit && nextSplit.chars) {
-        tl.fromTo(nextSplit.chars, 
-          { y: 10, opacity: 0 },
-          { y: 0, opacity: 0.5, duration: 0.5, stagger: 0.05, ease: "power2.out" },
-          0.1);
-      }
-      
-      if (extraSplit && extraSplit.chars) {
-        tl.fromTo(extraSplit.chars, 
-          { y: 10, opacity: 0 },
-          { y: 0, opacity: 0.5, duration: 0.5, stagger: 0.05, ease: "power2.out" },
-          0.1);
-      }
-      
-      return tl;
+      // Simply update the numbers without animation
+      this.updateCounterNumbers(newIndex);
+      return gsap.timeline(); // Return empty timeline to maintain compatibility
     }
 
     expoOut(t) {
@@ -471,52 +432,13 @@ document.addEventListener('DOMContentLoaded', () => {
         this.extraHeading.textContent = this.formatIndex(extraIndex + 1);
       }
 
-      // Re-split text after changing content
-      const counterElements = [
-        { el: this.countHeading, name: 'current' },
-        { el: this.prevHeading, name: 'prev' },
-        { el: this.nextHeading, name: 'next' },
-        { el: this.extraHeading, name: 'extra' }
-      ];
+      // Set opacities directly
+      if (this.countHeading) this.countHeading.style.opacity = '1';
+      if (this.prevHeading) this.prevHeading.style.opacity = '0.5';
+      if (this.nextHeading) this.nextHeading.style.opacity = '0.5';
+      if (this.extraHeading) this.extraHeading.style.opacity = '0.5';
 
-      counterElements.forEach(item => {
-        if (item.el && this.splitInstances[`counter-${item.name}`]) {
-          // Revert the split if possible
-          if (typeof this.splitInstances[`counter-${item.name}`].revert === 'function') {
-            this.splitInstances[`counter-${item.name}`].revert();
-          }
-
-          // Re-split with new content
-          this.splitInstances[`counter-${item.name}`] = new SplitType(item.el, {
-            types: 'chars',
-            tagName: 'span'
-          });
-        }
-      });
-
-      // Set initial opacity states without animation
-      gsap.set(this.countHeading, { opacity: 0 });
-      gsap.set(this.prevHeading, { opacity: 0 });
-      gsap.set(this.nextHeading, { opacity: 0 });
-      gsap.set(this.extraHeading, { opacity: 0 });
-
-      // Create a timeline for counter animations
-      const counterTl = gsap.timeline();
-      
-      // Animate the counters
-      counterTl
-        .to(this.countHeading, { 
-          opacity: 1, 
-          duration: 0.5, 
-          ease: "power2.out" 
-        }, 0)
-        .to([this.prevHeading, this.nextHeading, this.extraHeading], { 
-          opacity: 0.5, 
-          duration: 0.5, 
-          ease: "power2.out" 
-        }, 0.1);
-
-      return counterTl;
+      return gsap.timeline(); // Return empty timeline to maintain compatibility
     }
 
     updateContent(index, isInitial = false) {
