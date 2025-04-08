@@ -19,7 +19,7 @@ document.addEventListener('DOMContentLoaded', () => {
       this.isAnimating = false;
       this.transitionDuration = 0.8;
       this.transitionStrength = 0.1;
-      this.imageScale = 0.4; // Easily control image size (0.0 - 1.0)
+      this.imageScale = 0.35; // Easily control image size (0.0 - 1.0)
       this.allTexturesLoaded = false;
       
       // SplitType instances
