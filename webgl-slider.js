@@ -17,7 +17,9 @@ document.addEventListener('DOMContentLoaded', () => {
       this.images = [];
       this.textures = [];
       this.isAnimating = false;
+      this.pendingNavigation = null; // New property to store pending navigation
       this.transitionDuration = 0.8;
+      this.fastTransitionDuration = 0.4; // Faster duration for quick clicks
       this.transitionStrength = 0.1;
       this.imageScale = 0.35; // Easily control image size (0.0 - 1.0)
       this.allTexturesLoaded = false;
@@ -241,7 +243,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
       });
       
-      // When the first texture is loaded, initialize the material properly
+      // When all textures are loaded, initialize the material properly
       Promise.all(texturePromises).then(() => {
         this.allTexturesLoaded = true;
         this.createMaterial();
@@ -341,7 +343,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       this.worldButtons.forEach((button, index) => {
         button.addEventListener('click', () => {
-          if (this.currentIndex !== index && !this.isAnimating) {
+          if (this.currentIndex !== index) {
             const direction = index > this.currentIndex ? 1 : -1;
             this.goTo(index, direction);
           }
@@ -350,14 +352,32 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     navigate(direction) {
-      if (this.isAnimating || !this.allTexturesLoaded) return;
+      if (!this.allTexturesLoaded) return;
+      
+      // If we're already animating, store this navigation for later
+      if (this.isAnimating) {
+        this.pendingNavigation = { type: 'navigate', direction: direction };
+        return;
+      }
+      
       let nextIndex = (this.currentIndex + direction + this.totalSlides) % this.totalSlides;
       this.goTo(nextIndex, direction);
     }
 
     goTo(index, direction) {
-      if (this.isAnimating || !this.allTexturesLoaded) return;
+      if (!this.allTexturesLoaded) return;
+      
+      // If we're already animating, store this navigation for later
+      if (this.isAnimating) {
+        this.pendingNavigation = { type: 'goTo', index: index, direction: direction };
+        return;
+      }
+      
       this.isAnimating = true;
+      
+      // Check if we have pending navigation and adjust the transition speed
+      const isQuickClick = this.pendingNavigation !== null;
+      const transitionSpeed = isQuickClick ? this.fastTransitionDuration : this.transitionDuration;
       
       // Store current index before updating
       const previousIndex = this.currentIndex;
@@ -366,14 +386,34 @@ document.addEventListener('DOMContentLoaded', () => {
       const masterTimeline = gsap.timeline({
         onComplete: () => {
           this.isAnimating = false;
+          
+          // Process any pending navigation after current transition completes
+          if (this.pendingNavigation) {
+            const pending = this.pendingNavigation;
+            this.pendingNavigation = null; // Clear pending navigation
+            
+            if (pending.type === 'navigate') {
+              this.navigate(pending.direction);
+            } else if (pending.type === 'goTo') {
+              this.goTo(pending.index, pending.direction);
+            }
+          }
         }
       });
 
-      // Start by animating out the current text
-      masterTimeline.add(this.animateTextOut(previousIndex))
+      // Shorter animation for quick clicks
+      const animationDurationFactor = isQuickClick ? 0.5 : 1;
+
+      // Start by animating out the current text - faster if it's a quick click
+      if (isQuickClick) {
+        // For quick clicks, just hide the text immediately
+        this.worldHeadings[previousIndex].style.display = 'none';
+      } else {
+        masterTimeline.add(this.animateTextOut(previousIndex));
+      }
       
-      // Update counters with animation
-      masterTimeline.add(this.animateCounterUpdate(index), "<0.3")
+      // Update counters with animation - faster for quick clicks
+      masterTimeline.add(this.animateCounterUpdate(index), isQuickClick ? 0 : "<0.3");
       
       // Handle image transition
       this.material.uniforms.fromTexture.value = this.textures[this.currentIndex] || this.textures[0];
@@ -382,15 +422,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
       this.setPlaneSize(this.textures[index].image);
       
-      // Image transition timeline
+      // Image transition timeline - faster for quick clicks
       masterTimeline.to(this.material.uniforms.progress, {
         value: 1,
-        duration: this.transitionDuration,
+        duration: transitionSpeed,
         ease: "power2.inOut",
         onUpdate: () => {
           this.renderer.render(this.scene, this.camera);
         }
-      }, "<0.1");
+      }, isQuickClick ? 0 : "<0.1");
       
       // Update current index
       this.currentIndex = index;
@@ -399,11 +439,13 @@ document.addEventListener('DOMContentLoaded', () => {
       this.worldHeadings.forEach((heading, i) => {
         if (i === index) {
           heading.style.display = 'block';
-        } else if (i === previousIndex) {
-          // Keep old content visible until animation is done
+        } else if (i === previousIndex && !isQuickClick) {
+          // Keep old content visible until animation is done (only for normal speed)
           masterTimeline.call(() => {
             heading.style.display = 'none';
           }, null, null, ">-0.1");
+        } else {
+          heading.style.display = 'none';
         }
       });
       
@@ -412,8 +454,22 @@ document.addEventListener('DOMContentLoaded', () => {
         button.classList.toggle('active', i === index);
       });
       
-      // Animate in new content
-      masterTimeline.add(this.animateTextIn(index), "<0.4");
+      // Animate in new content - faster for quick clicks or skip if clicking rapidly
+      if (!isQuickClick) {
+        masterTimeline.add(this.animateTextIn(index), "<0.4");
+      } else {
+        // For quick clicks, just show the text without animation
+        const headingSplit = this.splitInstances[`heading-${index}`];
+        const textSplit = this.splitInstances[`text-${index}`];
+        
+        if (headingSplit && headingSplit.chars) {
+          gsap.set(headingSplit.chars, { y: 0, opacity: 1 });
+        }
+        
+        if (textSplit && textSplit.lines) {
+          gsap.set(textSplit.lines, { y: 0 });
+        }
+      }
     }
 
     updateCounterNumbers(newIndex) {
