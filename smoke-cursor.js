@@ -1,107 +1,96 @@
-document.addEventListener('DOMContentLoaded', () => {
-  const canvas = document.createElement('canvas');
-  document.body.appendChild(canvas);
+// Smoke cursor effect
+document.addEventListener('DOMContentLoaded', function() {
+    const canvas = document.createElement('canvas');
+    document.body.appendChild(canvas);
+    
+    // Apply styles to canvas
+    canvas.style.height = '100%';
+    canvas.style.width = '100%';
+    canvas.style.position = 'fixed';
+    canvas.style.bottom = 'auto';
+    canvas.style.left = '0';
+    canvas.style.right = 'auto';
+    canvas.style.top = '0';
+    canvas.style.opacity = '0.3';
+    canvas.style.pointerEvents = 'none'; // Ensure canvas doesn't interfere with page interactions
+    
+    const ctx = canvas.getContext('2d');
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
 
-  const gl = canvas.getContext('webgl');
-  let width, height;
-  const resize = () => {
-    width = canvas.width = window.innerWidth;
-    height = canvas.height = window.innerHeight;
-    gl.viewport(0, 0, width, height);
-  };
-  resize();
-  window.addEventListener('resize', resize);
+    // Particle array
+    let particles = [];
+    const maxParticles = 50;
 
-  const vertexShaderSource = `
-    attribute vec2 a_position;
-    void main() {
-      gl_Position = vec4(a_position, 0.0, 1.0);
+    // Mouse coordinates
+    let mouse = {
+        x: 0,
+        y: 0
+    };
+
+    // Track mouse movement
+    document.addEventListener('mousemove', function(e) {
+        mouse.x = e.clientX;
+        mouse.y = e.clientY;
+        
+        // Create particles on mouse move
+        for(let i = 0; i < 2; i++) {
+            particles.push(new Particle());
+        }
+    });
+
+    class Particle {
+        constructor() {
+            this.x = mouse.x;
+            this.y = mouse.y;
+            
+            this.size = Math.random() * 15 + 5;
+            this.speedX = Math.random() * 2 - 1;
+            this.speedY = Math.random() * 2 - 1;
+            this.life = 1;
+        }
+
+        update() {
+            this.x += this.speedX;
+            this.y += this.speedY;
+            if (this.size > 0.3) this.size -= 0.1;
+            this.life -= 0.01;
+        }
+
+        draw() {
+            ctx.fillStyle = `rgba(255, 255, 255, ${this.life})`;
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+            ctx.fill();
+        }
     }
-  `;
 
-  const fragmentShaderSource = `
-    precision mediump float;
-    uniform vec2 u_resolution;
-    uniform vec2 u_mouse;
-    uniform float u_time;
-
-    float drawSmoke(vec2 st, vec2 pos, float time) {
-      float d = distance(st, pos);
-      return exp(-10.0 * d) * (0.5 + 0.5 * sin(time * 3.0));
+    function animate() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        // Update and draw particles
+        for (let i = particles.length - 1; i >= 0; i--) {
+            particles[i].update();
+            particles[i].draw();
+            
+            if (particles[i].life <= 0) {
+                particles.splice(i, 1);
+            }
+        }
+        
+        // Limit particles
+        if (particles.length > maxParticles) {
+            particles = particles.slice(particles.length - maxParticles);
+        }
+        
+        requestAnimationFrame(animate);
     }
 
-    void main() {
-      vec2 st = gl_FragCoord.xy / u_resolution;
-      vec2 mouse = u_mouse / u_resolution;
-      float color = drawSmoke(st, mouse, u_time);
-      gl_FragColor = vec4(vec3(color), color);
-    }
-  `;
+    // Handle window resize
+    window.addEventListener('resize', function() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+    });
 
-  function createShader(gl, type, source) {
-    const shader = gl.createShader(type);
-    gl.shaderSource(shader, source);
-    gl.compileShader(shader);
-    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-      throw new Error(gl.getShaderInfoLog(shader));
-    }
-    return shader;
-  }
-
-  function createProgram(gl, vertexSource, fragmentSource) {
-    const program = gl.createProgram();
-    const vShader = createShader(gl, gl.VERTEX_SHADER, vertexSource);
-    const fShader = createShader(gl, gl.FRAGMENT_SHADER, fragmentSource);
-    gl.attachShader(program, vShader);
-    gl.attachShader(program, fShader);
-    gl.linkProgram(program);
-    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-      throw new Error(gl.getProgramInfoLog(program));
-    }
-    return program;
-  }
-
-  const program = createProgram(gl, vertexShaderSource, fragmentShaderSource);
-  gl.useProgram(program);
-
-  const positionBuffer = gl.createBuffer();
-  gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
-  const positions = [
-    -1, -1,
-     1, -1,
-    -1,  1,
-    -1,  1,
-     1, -1,
-     1,  1,
-  ];
-  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(positions), gl.STATIC_DRAW);
-
-  const positionLocation = gl.getAttribLocation(program, 'a_position');
-  gl.enableVertexAttribArray(positionLocation);
-  gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
-
-  const resolutionLocation = gl.getUniformLocation(program, 'u_resolution');
-  const mouseLocation = gl.getUniformLocation(program, 'u_mouse');
-  const timeLocation = gl.getUniformLocation(program, 'u_time');
-
-  let mouse = [width / 2, height / 2];
-  canvas.addEventListener('mousemove', e => {
-    mouse = [e.clientX, height - e.clientY];
-  });
-
-  let startTime = performance.now();
-  function render() {
-    let now = performance.now();
-    gl.viewport(0, 0, width, height);
-    gl.clear(gl.COLOR_BUFFER_BIT);
-
-    gl.uniform2f(resolutionLocation, width, height);
-    gl.uniform2f(mouseLocation, mouse[0], mouse[1]);
-    gl.uniform1f(timeLocation, (now - startTime) * 0.001);
-
-    gl.drawArrays(gl.TRIANGLES, 0, 6);
-    requestAnimationFrame(render);
-  }
-
-  render();
-});
+    animate();
+}); 
