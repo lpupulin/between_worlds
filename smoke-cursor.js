@@ -10,7 +10,7 @@ document.addEventListener('DOMContentLoaded', () => {
   canvas.style.height = '100%';
   canvas.style.pointerEvents = 'none'; // Ensure it doesn't interfere with page interactions
   canvas.style.zIndex = '9999'; // Keep it above other elements
-  canvas.style.opacity = '0.3';
+  canvas.style.opacity = '0.8'; // Increased opacity to make it more visible
   document.body.appendChild(canvas);
 
   canvas.width = canvas.clientWidth;
@@ -18,19 +18,32 @@ document.addEventListener('DOMContentLoaded', () => {
 
   let config = {
     TEXTURE_DOWNSAMPLE: 1,
-    DENSITY_DISSIPATION: 0.98,
-    VELOCITY_DISSIPATION: 0.99,
-    PRESSURE_DISSIPATION: 0.2,
+    DENSITY_DISSIPATION: 0.95, // Slower dissipation
+    VELOCITY_DISSIPATION: 0.95, // Slower dissipation
+    PRESSURE_DISSIPATION: 0.8, // Increased pressure effect
     PRESSURE_ITERATIONS: 25,
-    CURL: 50,
-    SPLAT_RADIUS: 0.005
+    CURL: 30,
+    SPLAT_RADIUS: 0.01 // Larger radius
   };
 
 
   let pointers = [];
   let splatStack = [];
 
-  const { gl, ext } = getWebGLContext(canvas);
+  let gl = null;
+  let ext = null;
+  
+  try {
+    const result = getWebGLContext(canvas);
+    if (!result) {
+      throw new Error('Unable to initialize WebGL context');
+    }
+    gl = result.gl;
+    ext = result.ext;
+  } catch (error) {
+    console.error('WebGL Error:', error);
+    return; // Exit if WebGL initialization fails
+  }
 
   function getWebGLContext(canvas) {
     const params = { alpha: false, depth: false, stencil: false, antialias: false };
@@ -608,7 +621,7 @@ document.addEventListener('DOMContentLoaded', () => {
     velocity.swap();
 
     gl.uniform1i(splatProgram.uniforms.uTarget, density.read[2]);
-    gl.uniform3f(splatProgram.uniforms.color, color[0] * 0.3, color[1] * 0.3, color[2] * 0.3);
+    gl.uniform3f(splatProgram.uniforms.color, color[0] * 1.0, color[1] * 1.0, color[2] * 1.0);
     blit(density.write[1]);
     density.swap();
   }
@@ -640,11 +653,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
   canvas.addEventListener('mousemove', e => {
     pointers[0].down = true;
-    pointers[0].color = [Math.random() + 0.2, Math.random() + 0.2, Math.random() + 0.2];
+    pointers[0].color = [
+      Math.random() * 5 + 1, // More intense colors
+      Math.random() * 5 + 1,
+      Math.random() * 5 + 1
+    ];
     
     pointers[0].moved = pointers[0].down;
-    pointers[0].dx = (e.offsetX - pointers[0].x) * 10.0;
-    pointers[0].dy = (e.offsetY - pointers[0].y) * 10.0;
+    pointers[0].dx = (e.offsetX - pointers[0].x) * 15.0; // Increased movement effect
+    pointers[0].dy = (e.offsetY - pointers[0].y) * 15.0;
     pointers[0].x = e.offsetX;
     pointers[0].y = e.offsetY;
   });
