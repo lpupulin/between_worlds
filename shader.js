@@ -1,10 +1,14 @@
-'use strict';
+document.addEventListener('DOMContentLoaded', () => {
+  const canvas = document.getElementById('shader-canvas'); // or getElementsByClassName(...)
+  if (!canvas) {
+    console.error('Canvas element not found!');
+    return;
+  }
 
-const canvas = document.getElementsByTagName('canvas_shader')[0];
-canvas.width = canvas.clientWidth;
-canvas.height = canvas.clientHeight;
+  canvas.width = canvas.clientWidth;
+  canvas.height = canvas.clientHeight;
 
-let config = {
+  let config = {
   TEXTURE_DOWNSAMPLE: 1,
   DENSITY_DISSIPATION: 0.98,
   VELOCITY_DISSIPATION: 0.99,
