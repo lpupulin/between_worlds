@@ -1,6 +1,6 @@
 'use strict';
 
-const canvas = document.getElementsByTagName('canvas')[0];
+const canvas = document.getElementsByTagName('canvas_shader')[0];
 canvas.width = canvas.clientWidth;
 canvas.height = canvas.clientHeight;
 
