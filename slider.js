@@ -18,12 +18,19 @@ document.addEventListener('DOMContentLoaded', () => {
       this.images = [];
       this.textures = [];
       this.isAnimating = false;
-      this.pendingNavigation = null;
+      this.pendingNavigation = null; // Store pending navigation
       this.transitionDuration = 0.8;
       this.fastTransitionDuration = 0.4; // Faster duration for quick clicks
       this.transitionStrength = 0.1;
       this.imageScale = 0.35; // Easily control image size (0.0 - 1.0)
       this.allTexturesLoaded = false;
+      
+      // Animation timelines
+      this.masterTimeline = null;
+      this.textInTimeline = null;
+      this.textOutTimeline = null;
+      this.cornerTimeline = null;
+      this.imageTimeline = null;
       
       // SplitType instances
       this.splitInstances = {};
@@ -68,9 +75,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       }
 
-      // Store the timeline to allow for interruption
-      this.cornerTimeline = null;
-
       this.worldButtons.forEach((link) => {
         // Move corners into button we're hovering
         link.addEventListener("mouseenter", () => {
@@ -82,7 +86,7 @@ document.addEventListener('DOMContentLoaded', () => {
           const state = Flip.getState(this.navCorners);
           link.appendChild(this.navCorners);
           this.cornerTimeline = Flip.from(state, {
-            duration: 0.3, // Slightly faster
+            duration: 0.3,
             ease: "power1.out"
           });
         });
@@ -99,7 +103,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const state = Flip.getState(this.navCorners);
             activeLink.appendChild(this.navCorners);
             this.cornerTimeline = Flip.from(state, {
-              duration: 0.3, // Slightly faster
+              duration: 0.3,
               ease: "power1.out"
             });
           }
@@ -174,7 +178,7 @@ document.addEventListener('DOMContentLoaded', () => {
       this.animateTextIn(this.currentIndex);
     }
 
-    animateTextIn(index) {
+    animateTextIn(index, quickAnimation = false) {
       // Kill any active text animations to prevent conflicts
       if (this.textInTimeline) {
         this.textInTimeline.kill();
@@ -185,6 +189,15 @@ document.addEventListener('DOMContentLoaded', () => {
       
       // Timeline for animations
       this.textInTimeline = gsap.timeline();
+      
+      // Make sure the heading is visible
+      if (this.worldHeadings[index]) {
+        this.worldHeadings[index].style.display = 'block';
+      }
+      
+      // For quick animations, still run animations but make them faster
+      const timescale = quickAnimation ? 1.5 : 1.0;
+      this.textInTimeline.timeScale(timescale);
       
       // Animate heading chars
       if (headingSplit && headingSplit.chars) {
@@ -215,7 +228,7 @@ document.addEventListener('DOMContentLoaded', () => {
       return this.textInTimeline;
     }
     
-    animateTextOut(index) {
+    animateTextOut(index, quickAnimation = false) {
       // Kill any active text animations to prevent conflicts
       if (this.textOutTimeline) {
         this.textOutTimeline.kill();
@@ -224,7 +237,18 @@ document.addEventListener('DOMContentLoaded', () => {
       const headingSplit = this.splitInstances[`heading-${index}`];
       const textSplit = this.splitInstances[`text-${index}`];
       
-      this.textOutTimeline = gsap.timeline();
+      this.textOutTimeline = gsap.timeline({
+        onComplete: () => {
+          // Hide the heading after animation completes
+          if (this.worldHeadings[index]) {
+            this.worldHeadings[index].style.display = 'none';
+          }
+        }
+      });
+      
+      // For quick animations, still run animations but make them faster
+      const timescale = quickAnimation ? 2.0 : 1.0;
+      this.textOutTimeline.timeScale(timescale);
       
       // Animate heading chars out
       if (headingSplit && headingSplit.chars) {
@@ -418,6 +442,7 @@ document.addEventListener('DOMContentLoaded', () => {
     navigate(direction) {
       if (!this.allTexturesLoaded) return;
       
+      // If we're performing rapid navigation, store the intent but don't block
       let nextIndex = (this.currentIndex + direction + this.totalSlides) % this.totalSlides;
       this.goTo(nextIndex, direction);
     }
@@ -425,117 +450,107 @@ document.addEventListener('DOMContentLoaded', () => {
     goTo(index, direction) {
       if (!this.allTexturesLoaded) return;
       
-      // Kill any ongoing animations to allow for immediate response to new clicks
+      // Check if we're in the middle of an animation
+      const isRapidChange = this.masterTimeline && this.masterTimeline.isActive();
+      
+      // If we're in the middle of an animation and this is a different target index
+      if (isRapidChange && this.pendingNavigation && this.pendingNavigation.index === index) {
+        // Trying to go to the same index that's already pending, do nothing
+        return;
+      }
+      
+      // Store this navigation as pending
+      this.pendingNavigation = { type: 'goTo', index: index, direction: direction };
+      
+      // If we're already animating, update the pending navigation but don't interrupt current animation
+      // unless it's been more than 0.3 seconds
+      if (isRapidChange && (this.masterTimeline.time() < 0.3)) {
+        return;
+      }
+      
+      // Kill any ongoing animations
       if (this.masterTimeline) {
         this.masterTimeline.kill();
       }
-      
-      this.isAnimating = true;
-      
-      // Check if we're performing rapid clicks
-      const isQuickClick = this.pendingNavigation !== null || this.isAnimating;
-      const transitionSpeed = isQuickClick ? this.fastTransitionDuration : this.transitionDuration;
+      if (this.textInTimeline) {
+        this.textInTimeline.kill();
+      }
+      if (this.textOutTimeline) {
+        this.textOutTimeline.kill();
+      }
       
       // Store current index before updating
       const previousIndex = this.currentIndex;
-
-      // Timeline for all animations - don't merge with previous timelines
+      this.isAnimating = true;
+      
+      // Check if we're performing rapid clicks
+      const isQuickClick = isRapidChange || this.pendingNavigation !== null;
+      const transitionSpeed = isQuickClick ? this.fastTransitionDuration : this.transitionDuration;
+      
+      // Master timeline for coordinating animations
       this.masterTimeline = gsap.timeline({
         onComplete: () => {
           this.isAnimating = false;
-          
-          // Process any pending navigation after current transition completes
-          if (this.pendingNavigation) {
-            const pending = this.pendingNavigation;
-            this.pendingNavigation = null; // Clear pending navigation
-            
-            if (pending.type === 'navigate') {
-              this.navigate(pending.direction);
-            } else if (pending.type === 'goTo') {
-              this.goTo(pending.index, pending.direction);
-            }
-          }
+          this.pendingNavigation = null;
         }
       });
-
-      // For quick clicks, immediately hide previous content
-      if (isQuickClick) {
-        this.worldHeadings[previousIndex].style.display = 'none';
-      } else {
-        // Only animate out text if not a quick click
-        this.masterTimeline.add(this.animateTextOut(previousIndex));
-      }
       
-      // Update counters immediately for responsiveness
+      // Start animating out current text
+      this.animateTextOut(previousIndex, isQuickClick);
+      
+      // Update counters immediately
       this.updateCounterNumbers(index);
       
-      // Handle image transition - always perform this for visual continuity
-      this.material.uniforms.fromTexture.value = this.textures[this.currentIndex] || this.textures[0];
+      // Update current index early
+      this.currentIndex = index;
+      
+      // Do WebGL transition
+      if (this.imageTimeline) {
+        this.imageTimeline.kill();
+      }
+      
+      this.material.uniforms.fromTexture.value = this.textures[previousIndex] || this.textures[0];
       this.material.uniforms.toTexture.value = this.textures[index] || this.textures[0];
       this.material.uniforms.progress.value = 0;
 
       this.setPlaneSize(this.textures[index].image);
       
-      // Image transition - always execute but make it faster for quick clicks
-      this.masterTimeline.to(this.material.uniforms.progress, {
+      // Image transition in parallel with text animations
+      this.imageTimeline = gsap.to(this.material.uniforms.progress, {
         value: 1,
         duration: transitionSpeed,
         ease: "power2.inOut",
         onUpdate: () => {
           this.renderer.render(this.scene, this.camera);
         }
-      }, isQuickClick ? 0 : "<0.1");
+      });
       
-      // Update current index
-      this.currentIndex = index;
-      
-      // Updated button class and move nav-corners simultaneously with other animations
+      // Update active buttons and move navCorners simultaneously
       this.worldButtons.forEach((button, i) => {
         button.classList.toggle('active', i === index);
         button.classList.toggle('is--active', i === index);
       });
       
-      // Move navCorners to the active button - parallel with image transition
+      // Move navCorners to the active button
       if (this.navCorners) {
         const activeButton = this.worldButtons[index];
-        // Kill any active corner animation
-        if (this.cornerTimeline) this.cornerTimeline.kill();
+        if (this.cornerTimeline) {
+          this.cornerTimeline.kill();
+        }
         
         const state = Flip.getState(this.navCorners);
         activeButton.appendChild(this.navCorners);
         this.cornerTimeline = Flip.from(state, {
-          duration: Math.min(0.3, transitionSpeed), // Ensure it's at most 0.3s
+          duration: Math.min(0.3, transitionSpeed),
           ease: "power1.out"
         });
       }
       
-      // Show new heading immediately
-      this.worldHeadings[index].style.display = 'block';
-      
-      // For normal transitions, animate the text in
-      // For quick clicks, just make the text immediately visible
-      if (!isQuickClick) {
-        this.masterTimeline.add(this.animateTextIn(index), "<0.4");
-      } else {
-        // For quick clicks, just show the text without animation
-        const headingSplit = this.splitInstances[`heading-${index}`];
-        const textSplit = this.splitInstances[`text-${index}`];
-        
-        if (headingSplit && headingSplit.chars) {
-          gsap.set(headingSplit.chars, { y: 0, opacity: 1 });
-        }
-        
-        if (textSplit && textSplit.lines) {
-          gsap.set(textSplit.lines, { y: 0 });
-        }
-      }
-      
-      // Hide previous content for normal transitions after animation completes
-      if (!isQuickClick && this.worldHeadings[previousIndex]) {
-        this.masterTimeline.call(() => {
-          this.worldHeadings[previousIndex].style.display = 'none';
-        }, null, null, ">-0.1");
-      }
+      // Animate in new content after a short delay
+      // Use setTimeout to ensure previous animations have started first
+      setTimeout(() => {
+        this.animateTextIn(index, isQuickClick);
+      }, isQuickClick ? 100 : 300);
     }
 
     updateCounterNumbers(newIndex) {
