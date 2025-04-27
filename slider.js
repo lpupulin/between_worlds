@@ -11,7 +11,7 @@ document.addEventListener('DOMContentLoaded', () => {
       this.nextHeading = document.querySelector('.count-heading.is-3') || null;
       this.extraHeading = document.querySelector('.count-heading.is-4') || null;
       this.worldHeadings = document.querySelectorAll('.world_heading-wrap');
-      this.navCorners = document.querySelectorAll('.nav-corners');
+      this.navCorners = document.querySelector('.nav-corners');
 
       this.currentIndex = 0;
       this.totalSlides = this.worldButtons.length;
@@ -51,7 +51,51 @@ document.addEventListener('DOMContentLoaded', () => {
       this.initThree();
       this.setupEventListeners();
       this.initTextSplitting();
+      this.setupNavCorners();
       this.updateContent(0, true); // true for initial load
+    }
+
+    setupNavCorners() {
+      if (!this.navCorners) return;
+
+      // Set the first button as active initially
+      if (this.worldButtons.length > 0) {
+        this.worldButtons[0].classList.add('is--active');
+        
+        // Place navCorners inside the first active button initially
+        if (this.navCorners && this.worldButtons[0]) {
+          this.worldButtons[0].appendChild(this.navCorners);
+        }
+      }
+
+      this.worldButtons.forEach((link) => {
+        // Move corners into button we're hovering
+        link.addEventListener("mouseenter", () => {
+          if (!this.navCorners) return;
+          
+          const state = Flip.getState(this.navCorners);
+          link.appendChild(this.navCorners);
+          Flip.from(state, {
+            duration: 0.4,
+            ease: "power1.inOut"
+          });
+        });
+        
+        // Move corners back to active button on hover out
+        link.addEventListener("mouseleave", () => {
+          if (!this.navCorners) return;
+          
+          const activeLink = document.querySelector(".button.is--active");
+          if (activeLink) {
+            const state = Flip.getState(this.navCorners);
+            activeLink.appendChild(this.navCorners);
+            Flip.from(state, {
+              duration: 0.4,
+              ease: "power1.inOut"
+            });
+          }
+        });
+      });
     }
 
     initTextSplitting() {
@@ -450,13 +494,21 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       });
       
-      // Update active buttons and nav-corners
+      // Update active buttons and move navCorners
       this.worldButtons.forEach((button, i) => {
         button.classList.toggle('active', i === index);
         
-        // Find corresponding nav-corners if it exists and update active state
-        if (this.navCorners && this.navCorners.length > i) {
-          this.navCorners[i].classList.toggle('active', i === index);
+        // Key fix: Update the is--active class for the nav-corners functionality
+        button.classList.toggle('is--active', i === index);
+        
+        // Move nav-corners to the newly active button
+        if (i === index && this.navCorners) {
+          const state = Flip.getState(this.navCorners);
+          button.appendChild(this.navCorners);
+          Flip.from(state, {
+            duration: 0.4,
+            ease: "power1.inOut"
+          });
         }
       });
       
@@ -507,9 +559,12 @@ document.addEventListener('DOMContentLoaded', () => {
       this.worldButtons.forEach((button, i) => {
         button.classList.toggle('active', i === index);
         
-        // Find corresponding nav-corners if it exists and update active state
-        if (this.navCorners && this.navCorners.length > i) {
-          this.navCorners[i].classList.toggle('active', i === index);
+        // Key fix: Update is--active class here too
+        button.classList.toggle('is--active', i === index);
+        
+        // If initial load, move navCorners to active button
+        if (isInitial && i === index && this.navCorners) {
+          button.appendChild(this.navCorners);
         }
       });
 
@@ -534,10 +589,15 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   try {
-    if (typeof THREE !== 'undefined') {
+    if (typeof THREE !== 'undefined' && typeof Flip !== 'undefined') {
       new WebGLSlider();
     } else {
-      console.error('WebGL Slider: Three.js library not loaded');
+      if (typeof THREE === 'undefined') {
+        console.error('WebGL Slider: Three.js library not loaded');
+      }
+      if (typeof Flip === 'undefined') {
+        console.error('WebGL Slider: GSAP Flip plugin not loaded');
+      }
     }
   } catch (error) {
     console.error('WebGL Slider: Error initializing slider', error);
