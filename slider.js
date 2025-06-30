@@ -41,7 +41,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       });
 
-      if (!this.container || !this.imageElement || !this.leftArrow || !this.rightArrow || 
+      if (!this.container || !this.imageElement || !this.leftArrow || !this.rightArrow ||
           this.worldButtons.length === 0 || !this.countHeading) {
         console.error('WebGL Slider: Required DOM elements not found');
         return;
@@ -49,9 +49,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
       this.initThree();
       this.setupEventListeners();
-      this.initTextSplitting();
-      this.setupNavCorners();
-      this.updateContent(0, true);
+    }
+
+    setupEventListeners() {
+      this.leftArrow.addEventListener('click', () => this.navigate(-1));
+      this.rightArrow.addEventListener('click', () => this.navigate(1));
+
+      this.worldButtons.forEach((button, index) => {
+        button.addEventListener('click', () => {
+          if (this.currentIndex !== index) {
+            const direction = index > this.currentIndex ? 1 : -1;
+            this.goTo(index, direction);
+          }
+        });
+      });
     }
 
     initThree() {
@@ -61,14 +72,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
       this.imageElement.style.display = 'none';
 
-      // ✅ FIX: Append canvas inside .gallery-sticky
-      const stickyWrapper = this.container.querySelector('.gallery-sticky');
-      if (stickyWrapper) {
-        stickyWrapper.appendChild(this.renderer.domElement);
-      } else {
-        console.warn('WebGLSlider: .gallery-sticky not found. Appending canvas to .section.is-gallery as fallback.');
-        this.container.appendChild(this.renderer.domElement);
-      }
+      const stickyContainer = this.container.querySelector('.gallery-sticky');
+      stickyContainer.appendChild(this.renderer.domElement);
 
       this.renderer.domElement.classList.add('webgl-canvas');
       Object.assign(this.renderer.domElement.style, {
@@ -83,14 +88,11 @@ document.addEventListener('DOMContentLoaded', () => {
       this.scene = new THREE.Scene();
       this.camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
       this.geometry = new THREE.PlaneGeometry(2, 2);
-
       this.material = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0 });
       this.mesh = new THREE.Mesh(this.geometry, this.material);
       this.scene.add(this.mesh);
 
       const loader = new THREE.TextureLoader();
-      this.loadedTextures = 0;
-
       const texturePromises = this.images.map((src, i) => {
         return new Promise((resolve) => {
           loader.load(src, (texture) => {
@@ -99,9 +101,7 @@ document.addEventListener('DOMContentLoaded', () => {
             texture.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
             texture.generateMipmaps = false;
             texture.needsUpdate = true;
-
             this.textures[i] = texture;
-            this.loadedTextures++;
             resolve(texture);
           });
         });
@@ -125,22 +125,100 @@ document.addEventListener('DOMContentLoaded', () => {
       this.renderer.render(this.scene, this.camera);
     }
 
-    // … Keep the rest of your WebGLSlider class methods unchanged …
-    // setupEventListeners, setupNavCorners, animateTextIn, animateTextOut,
-    // updateContent, createMaterial, setPlaneSize, goTo, navigate, etc.
+    setPlaneSize(image) {
+      if (!image) return;
+      const imageAspect = image.width / image.height;
+      const screenAspect = window.innerWidth / window.innerHeight;
+      let width, height;
+      if (imageAspect > screenAspect) {
+        width = 2 * this.imageScale;
+        height = (2 / imageAspect) * screenAspect * this.imageScale;
+      } else {
+        height = 2 * this.imageScale;
+        width = 2 * imageAspect / screenAspect * this.imageScale;
+      }
+      this.mesh.scale.set(width, height, 1);
+    }
 
+    createMaterial() {
+      this.scene.remove(this.mesh);
+      this.material = new THREE.ShaderMaterial({
+        uniforms: {
+          progress: { value: 0 },
+          fromTexture: { value: this.textures[0] },
+          toTexture: { value: this.textures[0] },
+          strength: { value: this.transitionStrength }
+        },
+        vertexShader: `
+          varying vec2 vUv;
+          void main() {
+            vUv = uv;
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+          }
+        `,
+        fragmentShader: `
+          varying vec2 vUv;
+          uniform float progress;
+          uniform float strength;
+          uniform sampler2D fromTexture;
+          uniform sampler2D toTexture;
+
+          vec4 getFromColor(vec2 uv) {
+            return texture2D(fromTexture, uv);
+          }
+
+          vec4 getToColor(vec2 uv) {
+            return texture2D(toTexture, uv);
+          }
+
+          vec4 transition(vec2 p) {
+            vec4 ca = getFromColor(p);
+            vec4 cb = getToColor(p);
+            vec2 oa = (((ca.rg + ca.b) * 0.5) * 2.0 - 1.0);
+            vec2 ob = (((cb.rg + cb.b) * 0.5) * 2.0 - 1.0);
+            vec2 oc = mix(oa, ob, 0.5) * strength;
+            float w0 = progress;
+            float w1 = 1.0 - w0;
+            return mix(getFromColor(p + oc * w0), getToColor(p - oc * w1), progress);
+          }
+
+          void main() {
+            gl_FragColor = transition(vUv);
+          }
+        `,
+        transparent: true
+      });
+      this.mesh = new THREE.Mesh(this.geometry, this.material);
+      this.scene.add(this.mesh);
+    }
+
+    navigate(direction) {
+      if (!this.allTexturesLoaded) return;
+      const nextIndex = (this.currentIndex + direction + this.totalSlides) % this.totalSlides;
+      this.goTo(nextIndex, direction);
+    }
+
+    goTo(index, direction) {
+      if (!this.allTexturesLoaded) return;
+      this.material.uniforms.fromTexture.value = this.textures[this.currentIndex];
+      this.material.uniforms.toTexture.value = this.textures[index];
+      this.material.uniforms.progress.value = 0;
+      this.setPlaneSize(this.textures[index].image);
+      gsap.to(this.material.uniforms.progress, {
+        value: 1,
+        duration: this.transitionDuration,
+        ease: "power2.inOut",
+        onUpdate: () => this.renderer.render(this.scene, this.camera)
+      });
+      this.currentIndex = index;
+    }
   }
 
   try {
-    if (typeof THREE !== 'undefined' && typeof Flip !== 'undefined') {
+    if (typeof THREE !== 'undefined') {
       new WebGLSlider();
     } else {
-      if (typeof THREE === 'undefined') {
-        console.error('WebGL Slider: Three.js library not loaded');
-      }
-      if (typeof Flip === 'undefined') {
-        console.error('WebGL Slider: GSAP Flip plugin not loaded');
-      }
+      console.error('WebGL Slider: Three.js not loaded');
     }
   } catch (error) {
     console.error('WebGL Slider: Error initializing slider', error);
